@@ -50,15 +50,16 @@ def main(argv):
         
     if action == "lag":
         pass
+    elif action == "connections":
+        check_connections(host, port, warning, critical)
     else:
-        do_connect(host, port, warning, critical)
+        check_connect(host, port, warning, critical)
 
 def usage():
     print "usage info will go here"
 
 
-def do_connect(host, port, warning, critical):
-    
+def check_connect(host, port, warning, critical):
     try:
         start = time.time()
         con = pymongo.Connection(host, port, network_timeout=critical)
@@ -78,7 +79,31 @@ def do_connect(host, port, warning, critical):
     except pymongo.errors.ConnectionFailure:
         print "CRITICAL - Connection to MongoDB failed!"
         sys.exit(2)
-    
+
+def check_connections(host, port, warning, critical):
+    try:
+        con = pymongo.Connection(host, port)
+        data = con.admin.command(pymongo.son.SON([('serverStatus', 1), ('repl', 1)]))
+        
+        current = float(data['connections']['current'])
+        available = float(data['connections']['available'])
+
+        left_percent = int(float(current / available) * 100)
+
+        if left_percent >= critical:
+            print "CRITICAL - Percentage used: %i" % left_percent
+            sys.exit(2)
+        elif left_percent >= warning:
+            print "WARNING - Percentage used: %i" % left_percent
+            sys.exit(1)
+        else:
+            print "OK - Percentage used: %i" % left_percent
+            sys.exit(0)
+
+    except pymongo.errors.ConnectionFailure:
+        print "CRITICAL - Connection to MongoDB failed!"
+        sys.exit(2)
+
 #
 # main app
 #
