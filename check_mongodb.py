@@ -48,9 +48,7 @@ def main(argv):
         elif opt in ("-A", "--action"):
             action = arg
         
-    if action == "lag":
-        check_rep_lag(host, port, warning, critical)
-    elif action == "connections":
+    if action == "connections":
         check_connections(host, port, warning, critical)
     elif action == "replication_lag":
         check_rep_lag(host, port, warning, critical)
@@ -64,7 +62,7 @@ def usage():
 def check_connect(host, port, warning, critical):
     try:
         start = time.time()
-        con = pymongo.Connection(host, port, network_timeout=critical)
+        con = pymongo.Connection(host, port, slave_okay=True, network_timeout=critical)
         
         conn_time = time.time() - start
         conn_time = round(conn_time, 0)
@@ -84,7 +82,7 @@ def check_connect(host, port, warning, critical):
 
 def check_connections(host, port, warning, critical):
     try:
-        con = pymongo.Connection(host, port)
+        con = pymongo.Connection(host, port, slave_okay=True)
         data = con.admin.command(pymongo.son.SON([('serverStatus', 1), ('repl', 1)]))
         
         current = float(data['connections']['current'])
@@ -108,7 +106,7 @@ def check_connections(host, port, warning, critical):
 
 def check_rep_lag(host, port, warning, critical):
     try:
-        con = pymongo.Connection(host, port)
+        con = pymongo.Connection(host, port, slave_okay=True)
         data = con.admin.command(pymongo.son.SON([('serverStatus', 1), ('repl', 2)]))
         
         #
