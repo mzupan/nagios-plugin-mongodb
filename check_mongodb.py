@@ -49,7 +49,7 @@ def main(argv):
             action = arg
         
     if action == "lag":
-        pass
+        check_rep_lag(host, port, warning, critical)
     elif action == "connections":
         check_connections(host, port, warning, critical)
     elif action == "replication_lag":
