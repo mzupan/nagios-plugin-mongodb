@@ -52,6 +52,8 @@ def main(argv):
         pass
     elif action == "connections":
         check_connections(host, port, warning, critical)
+    elif action == "replication_lag":
+        check_rep_lag(host, port, warning, critical)
     else:
         check_connect(host, port, warning, critical)
 
@@ -104,6 +106,31 @@ def check_connections(host, port, warning, critical):
         print "CRITICAL - Connection to MongoDB failed!"
         sys.exit(2)
 
+def check_rep_lag(host, port, warning, critical):
+    try:
+        con = pymongo.Connection(host, port)
+        data = con.admin.command(pymongo.son.SON([('serverStatus', 1), ('repl', 2)]))
+        
+        #
+        # right now this will work for master/slave and replication pairs. It will have to be 
+        # fixed for replication sets when they become final
+        #
+        lag = int(data['repl']['sources'][0]['lagSeconds'])
+        
+        if lag >= critical:
+            print "CRITICAL - Replication lag: %i" % lag
+            sys.exit(2)
+        elif lag >= warning:
+            print "WARNING - Replication lag: %i" % lag
+            sys.exit(1)
+        else:
+            print "OK - Replication lag: %i" % lag
+            sys.exit(0)
+        
+ 
+    except pymongo.errors.ConnectionFailure:
+        print "CRITICAL - Connection to MongoDB failed!"
+        sys.exit(2)
 #
 # main app
 #
