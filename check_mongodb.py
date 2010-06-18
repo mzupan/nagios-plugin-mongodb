@@ -1,8 +1,17 @@
 #!/usr/bin/env python
 
 #
+# A MongoDB Nagios check script
+# 
+# Script idea taken from a Tag1 script I found and I modified it a lot
+#
+# Contributers
+#   - Mike Zupan <mike@zcentric.com> <mzupan@theopenskyproject.com>
 #
 #
+# USAGE
+#
+# See the README.md
 #
 
 import os
@@ -56,7 +65,19 @@ def main(argv):
         check_connect(host, port, warning, critical)
 
 def usage():
-    print "usage info will go here"
+    print 
+    print "%s -H host -A action -W warning -C critical" % sys.argv[0]
+    print
+    print "Below are the following flags you can use"
+    print
+    print "  -H : The hostname you want to connect to"
+    print "  -A : The action you want to take"
+    print "        - replication_lag : checks the replication lag"
+    print "        - connections : checks the percentage of free connections"
+    print "        - connect: can we connect to the mongodb server"
+    print "  -W : The warning threshold we want to set"
+    print "  -C : The critical threshold we want to set"
+    print
 
 
 def check_connect(host, port, warning, critical):
