@@ -62,7 +62,9 @@ def main(argv):
     elif action == "replication_lag":
         check_rep_lag(host, port, warning, critical)
     elif action == "memory":
-        check_memory(host, port, warning, critical)        
+        check_memory(host, port, warning, critical)
+    elif action == "lock":
+        check_lock(host, port, warning, critical)        
     else:
         check_connect(host, port, warning, critical)
 
@@ -78,6 +80,7 @@ def usage():
     print "        - connections : checks the percentage of free connections"
     print "        - connect: can we connect to the mongodb server"
     print "        - memory: checks the resident memory used by mongodb in gigabytes"
+    print "        - lock: checks percentage of lock time for the server"
     print "  -W : The warning threshold we want to set"
     print "  -C : The critical threshold we want to set"
     print
@@ -170,9 +173,9 @@ def check_memory(host, port, warning, critical):
         con = pymongo.Connection(host, port, slave_okay=True)
         
         try:
-            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1), ('repl', 2)]))
+            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
         except:
-            data = con.admin.command(pymongo.son.SON([('serverStatus', 1), ('repl', 2)]))
+            data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
         
         #
         # convert to gigs
@@ -196,6 +199,42 @@ def check_memory(host, port, warning, critical):
     except pymongo.errors.ConnectionFailure:
         print "CRITICAL - Connection to MongoDB failed!"
         sys.exit(2)
+        
+
+def check_lock(host, port, warning, critical):
+    try:
+        con = pymongo.Connection(host, port, slave_okay=True)
+        
+        try:
+            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
+        except:
+            data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
+        
+        #
+        # convert to gigs
+        #  
+        lock = float(data['globalLock']['lockTime']) / float(data['globalLock']['totalTime'])
+
+        warning = float(warning)
+        critical = float(critical)
+        
+        if lock >= critical:
+            print "CRITICAL - Lock Percentage: %s" % ("%.2f" % round(lock,2))
+            sys.exit(2)
+        elif lock >= warning:
+            print "WARNING - Lock Percentage: %s" % ("%.2f" % round(lock,2))
+            sys.exit(1)
+        else:
+            print "OK - Lock Percentage: %s" % ("%.2f" % round(lock,2))
+            sys.exit(0)
+        
+ 
+    except pymongo.errors.ConnectionFailure:
+        print "CRITICAL - Connection to MongoDB failed!"
+        sys.exit(2)
+        
+
+
 #
 # main app
 #
