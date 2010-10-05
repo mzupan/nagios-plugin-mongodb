@@ -104,9 +104,9 @@ def check_connect(host, port, warning, critical):
 def check_connections(host, port, warning, critical):
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
-        if float(pymongo.version) > 1.7:
+        try:
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1), ('repl', 1)]))
-        else:
+        except:
             data = con.admin.command(pymongo.son.SON([('serverStatus', 1), ('repl', 1)]))
             
         current = float(data['connections']['current'])
@@ -132,9 +132,9 @@ def check_rep_lag(host, port, warning, critical):
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
         
-        if float(pymongo.version) > 1.7:
+        try:
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1), ('repl', 2)]))
-        else:
+        except:
             data = con.admin.command(pymongo.son.SON([('serverStatus', 1), ('repl', 2)]))
             
         #
