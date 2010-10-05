@@ -104,8 +104,11 @@ def check_connect(host, port, warning, critical):
 def check_connections(host, port, warning, critical):
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
-        data = con.admin.command(pymongo.son.SON([('serverStatus', 1), ('repl', 1)]))
-        
+        if float(pymongo.version) > 1.7:
+            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1), ('repl', 1)]))
+        else:
+            data = con.admin.command(pymongo.son.SON([('serverStatus', 1), ('repl', 1)]))
+            
         current = float(data['connections']['current'])
         available = float(data['connections']['available'])
 
@@ -128,8 +131,12 @@ def check_connections(host, port, warning, critical):
 def check_rep_lag(host, port, warning, critical):
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
-        data = con.admin.command(pymongo.son.SON([('serverStatus', 1), ('repl', 2)]))
         
+        if float(pymongo.version) > 1.7:
+            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1), ('repl', 2)]))
+        else:
+            data = con.admin.command(pymongo.son.SON([('serverStatus', 1), ('repl', 2)]))
+            
         #
         # right now this will work for master/slave and replication pairs. It will have to be 
         # fixed for replication sets when they become final
