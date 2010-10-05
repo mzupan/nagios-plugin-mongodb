@@ -141,7 +141,11 @@ def check_rep_lag(host, port, warning, critical):
         # right now this will work for master/slave and replication pairs. It will have to be 
         # fixed for replication sets when they become final
         #
-        lag = int(float(data['repl']['sources'][0]['lagSeconds']))
+        try:
+            lag = int(float(data['repl']['sources'][0]['lagSeconds']))
+        except:
+            print "Not setup for master/slave."
+            sys.exit(1)
         
         if lag >= critical:
             print "CRITICAL - Replication lag: %i" % lag
