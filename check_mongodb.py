@@ -61,6 +61,8 @@ def main(argv):
         check_connections(host, port, warning, critical)
     elif action == "replication_lag":
         check_rep_lag(host, port, warning, critical)
+    elif action == "memory":
+        check_memory(host, port, warning, critical)        
     else:
         check_connect(host, port, warning, critical)
 
@@ -75,6 +77,7 @@ def usage():
     print "        - replication_lag : checks the replication lag"
     print "        - connections : checks the percentage of free connections"
     print "        - connect: can we connect to the mongodb server"
+    print "        - memory: checks the resident memory used by mongodb in gigabytes"
     print "  -W : The warning threshold we want to set"
     print "  -C : The critical threshold we want to set"
     print
@@ -155,6 +158,38 @@ def check_rep_lag(host, port, warning, critical):
             sys.exit(1)
         else:
             print "OK - Replication lag: %i" % lag
+            sys.exit(0)
+        
+ 
+    except pymongo.errors.ConnectionFailure:
+        print "CRITICAL - Connection to MongoDB failed!"
+        sys.exit(2)
+        
+def check_memory(host, port, warning, critical):
+    try:
+        con = pymongo.Connection(host, port, slave_okay=True)
+        
+        try:
+            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1), ('repl', 2)]))
+        except:
+            data = con.admin.command(pymongo.son.SON([('serverStatus', 1), ('repl', 2)]))
+        
+        #
+        # convert to gigs
+        #  
+        mem = float(data['mem']['resident']) / 1000.0
+        
+        warning = float(warning)
+        critical = float(critical)
+        
+        if mem >= critical:
+            print "CRITICAL - Memory Usage: %f gig" % mem
+            sys.exit(2)
+        elif mem >= warning:
+            print "WARNING - Memory Usage: %f gig" % mem
+            sys.exit(1)
+        else:
+            print "OK - Memory Usage: %f gig" % mem
             sys.exit(0)
         
  
