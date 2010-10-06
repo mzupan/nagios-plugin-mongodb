@@ -64,7 +64,9 @@ def main(argv):
     elif action == "memory":
         check_memory(host, port, warning, critical)
     elif action == "lock":
-        check_lock(host, port, warning, critical)        
+        check_lock(host, port, warning, critical)
+    elif action == "flushing":
+        check_flushing(host, port, warning, critical)        
     else:
         check_connect(host, port, warning, critical)
 
@@ -81,6 +83,7 @@ def usage():
     print "        - connect: can we connect to the mongodb server"
     print "        - memory: checks the resident memory used by mongodb in gigabytes"
     print "        - lock: checks percentage of lock time for the server"
+    print "        - flushing: checks the average flush time the server"
     print "  -W : The warning threshold we want to set"
     print "  -C : The critical threshold we want to set"
     print
@@ -232,7 +235,35 @@ def check_lock(host, port, warning, critical):
     except pymongo.errors.ConnectionFailure:
         print "CRITICAL - Connection to MongoDB failed!"
         sys.exit(2)
+
+def check_flushing(host, port, warning, critical):
+    try:
+        con = pymongo.Connection(host, port, slave_okay=True)
         
+        try:
+            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
+        except:
+            data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
+        
+        avg_flush = float(data['backgroundFlushing']['average_ms'])
+        
+        warning = float(warning)
+        critical = float(critical)
+        
+        if avg_flush >= critical:
+            print "CRITICAL - Avg Flush Time: %sms" % ("%.2f" % round(avg_flush,2))
+            sys.exit(2)
+        elif avg_flush >= warning:
+            print "WARNING - Avg Flush Time: %sms" % ("%.2f" % round(avg_flush,2))
+            sys.exit(1)
+        else:
+            print "OK - Avg Flush Time: %sms" % ("%.2f" % round(avg_flush,2))
+            sys.exit(0)
+        
+ 
+    except pymongo.errors.ConnectionFailure:
+        print "CRITICAL - Connection to MongoDB failed!"
+        sys.exit(2)
 
 
 #

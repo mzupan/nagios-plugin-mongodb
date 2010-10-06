@@ -89,3 +89,16 @@ define service {
     check_command           check_mongodb!lock!5!10
 }
 </code></pre>
+
+#### Check Average Flush Time
+
+This is a test that will check the average flush time of Mongo server. In my example my Mongo I want to be warned if the average flush time is above 100ms and get an error if it's above 200ms. When you start to get a high average flush time it means your database is write bound.
+
+<pre><code>
+define service {
+    use                 generic-service
+    hostgroup_name          Mongo Servers
+    service_description     Mongo Flush Average
+    check_command           check_mongodb!flushing!100!200
+}
+</code></pre>
