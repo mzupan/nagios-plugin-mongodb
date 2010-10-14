@@ -4,10 +4,11 @@
 # A MongoDB Nagios check script
 # 
 # Script idea taken from Mike Zupans check_mongodb.py. Special thanks to Mike for fixing problems within minutes,
-# also for being up all sorts of crazy hours ;-)
+# also for being up all sorts of crazy hours ;-) 
+# And thanks to Travel IQ < http://www.travel-iq.com http://www.hotelauskunft.de > best flight and hotelsearch of the world.
 #
 # Contributer of this fork
-#   - Frank Brandewiede <brande@travel-iq.com> <brande@bfiw.de>
+#   - Frank Brandewiede <brande@travel-iq.com> <brande@bfiw.de> <brande@novolab.de>
 #
 #
 # Last changes (11.10.2010): - changes argument parser and error handling
