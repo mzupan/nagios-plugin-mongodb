@@ -13,6 +13,7 @@
 #
 # Last changes (11.10.2010): - changes argument parser and error handling
 #                            - added check for replsets
+#              (14.10.2010)  - added flushing check from Mike Zupans
 #
 #
 # USAGE
