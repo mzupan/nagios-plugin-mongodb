@@ -102,3 +102,15 @@ define service {
     check_command           check_mongodb!flushing!100!200
 }
 </code></pre>
+
+#### Check status of mongodb 
+This is a test taht will check the status of nodes within a replset. Depending which status it is it sends a waring during status 0, 3 and 5, critical if the status is 4, 6 or 8 and a ok with status 1, 2 and 7.
+
+<pre><code>
+define service {
+      use                     generic-service
+      host_name               Mongo Servers
+      service_description     MongoDB state
+      check_command           check_mongodb!replset_state!27017
+}
+</code></pre>
