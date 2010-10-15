@@ -19,7 +19,7 @@ Edit your commands.cfg and add the following
 <pre><code>
 define command {
     command_name    check_mongodb
-    command_line    $USER1$/nagios-plugin-mongodb/check_mongodb.py -H $HOSTADDRESS$ -A $ARG1$ -W $ARG2$ -C $ARG3$
+    command_line    $USER1$/nagios-plugin-mongodb/check_mongodb.py -H $HOSTADDRESS$ -P $ARG1$ -A $ARG2$ -W $ARG3$ -C $ARG4$
 }
 </code></pre>
 
@@ -34,7 +34,7 @@ define service {
     use                 generic-service
     hostgroup_name          Mongo Servers
     service_description     Mongo Connect Check
-    check_command           check_mongodb!connect!2!4
+    check_command           check_mongodb!connect!27017!2!4
 }   
 </code></pre>
 
@@ -47,7 +47,7 @@ define service {
     use                 generic-service
     hostgroup_name          Mongo Servers
     service_description     Mongo Free Connections
-    check_command           check_mongodb!connections!70!80
+    check_command           check_mongodb!connections!27017!70!80
 }   
 </code></pre>
 
@@ -60,7 +60,7 @@ define service {
     use                 generic-service
     hostgroup_name          Mongo Servers
     service_description     Mongo Replication Lag
-    check_command           check_mongodb!replication_lag!2!5
+    check_command           check_mongodb!replication_lag!27017!2!5
 }
 </code></pre>
 
@@ -73,7 +73,7 @@ define service {
     use                 generic-service
     hostgroup_name          Mongo Servers
     service_description     Mongo Memory Usage
-    check_command           check_mongodb!memory!20!28
+    check_command           check_mongodb!memory!27017!20!28
 }
 </code></pre>
 
@@ -86,7 +86,7 @@ define service {
     use                 generic-service
     hostgroup_name          Mongo Servers
     service_description     Mongo Lock Percentage
-    check_command           check_mongodb!lock!5!10
+    check_command           check_mongodb!lock!27017!5!10
 }
 </code></pre>
 
@@ -99,17 +99,17 @@ define service {
     use                 generic-service
     hostgroup_name          Mongo Servers
     service_description     Mongo Flush Average
-    check_command           check_mongodb!flushing!100!200
+    check_command           check_mongodb!flushing!27017!100!200
 }
 </code></pre>
 
-#### Check status of mongodb 
-This is a test taht will check the status of nodes within a replset. Depending which status it is it sends a waring during status 0, 3 and 5, critical if the status is 4, 6 or 8 and a ok with status 1, 2 and 7.
+#### Check status of mongodb replicaset
+This is a test that will check the status of nodes within a replicaset. Depending which status it is it sends a waring during status 0, 3 and 5, critical if the status is 4, 6 or 8 and a ok with status 1, 2 and 7.
 
 <pre><code>
 define service {
       use                     generic-service
-      host_name               Mongo Servers
+      hostgroup_name          Mongo Servers
       service_description     MongoDB state
       check_command           check_mongodb!replset_state!27017
 }

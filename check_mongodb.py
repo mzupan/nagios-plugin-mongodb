@@ -37,7 +37,7 @@ except:
 
 def usage():
     print 
-    print "%s -H host -A action -W warning -C critical" % sys.argv[0]
+    print "%s -H host -A action -P port -W warning -C critical" % sys.argv[0]
     print
     print "Below are the following flags you can use"
     print
@@ -50,6 +50,7 @@ def usage():
     print "        - lock: checks percentage of lock time for the server"
     print "        - flushing: checks the average flush time the server"
     print "        - replset_state: State of the node within a replset configuration"
+    print "  -P : The port MongoDB is running on (defaults to 27017)"
     print "  -W : The warning threshold we want to set"
     print "  -C : The critical threshold we want to set"
     print
@@ -81,21 +82,21 @@ def main(argv):
 
     sresult = sregex.search(port_string)
     if sresult:
-	 port = 27017
+        port = 27017
     else:
-	 port = int(port_string)
+        port = int(port_string)
 
     sresult = sregex.search(warning_string)
     if sresult:
-	 warning = 2
+        warning = 2
     else:
-	 warning = int(warning_string)
+        warning = int(warning_string)
 
     sresult = sregex.search(critical_string)
     if sresult:
-	 critical = 5
+        critical = 5
     else:
-	 critical = int(critical_string)
+        critical = int(critical_string)
 
     if action == "connections":
         check_connections(host, port, warning, critical)
@@ -149,13 +150,13 @@ def check_connections(host, port, warning, critical):
         left_percent = int(float(current / available) * 100)
 
         if left_percent >= critical:
-            print "CRITICAL -  %i percent \(%i of %i connections\) used" % (left_percent, current, available)
+            print "CRITICAL -  %i percent (%i of %i connections) used" % (left_percent, current, available)
             sys.exit(2)
         elif left_percent >= warning:
-            print "WARNING - %i percent \(%i of %i connections\) used" % (left_percent, current, available)
+            print "WARNING - %i percent (%i of %i connections) used" % (left_percent, current, available)
             sys.exit(1)
         else:
-            print "OK - %i percent \(%i of %i connections\) used" % (left_percent, current, available)
+            print "OK - %i percent (%i of %i connections) used" % (left_percent, current, available)
             sys.exit(0)
 
     except pymongo.errors.ConnectionFailure:
@@ -306,31 +307,31 @@ def check_replset_state(host, port):
         state = int(data['myState'])
         
         if state == 8:
-            print "CRITICAL - State: %i \(Down\)" % state
+            print "CRITICAL - State: %i (Down)" % state
             sys.exit(2)
         elif state == 4:
-            print "CRITICAL - State: %i \(Fatal error\)" % state
+            print "CRITICAL - State: %i (Fatal error)" % state
             sys.exit(2)
         elif state == 0:
-            print "WARNING - State: %i \(Starting up, phase1\)" % state
+            print "WARNING - State: %i (Starting up, phase1)" % state
             sys.exit(1)
         elif state == 3:
-            print "WARNING - State: %i \(Recovering\)" % state
+            print "WARNING - State: %i (Recovering)" % state
             sys.exit(1)
         elif state == 5:
-            print "WARNING - State: %i \(Starting up, phase2\)" % state
+            print "WARNING - State: %i (Starting up, phase2)" % state
             sys.exit(1)
         elif state == 1:
-            print "OK - State: %i \(Primary\)" % state
+            print "OK - State: %i (Primary)" % state
             sys.exit(0)
         elif state == 2:
-            print "OK - State: %i \(Secondary\)" % state
+            print "OK - State: %i (Secondary)" % state
             sys.exit(0)
         elif state == 7:
-            print "OK - State: %i \(Arbiter\)" % state
+            print "OK - State: %i (Arbiter)" % state
             sys.exit(0)
         else:
-            print "CRITICAL - State: %i \(Unknown state\)" % state
+            print "CRITICAL - State: %i (Unknown state)" % state
             sys.exit(2)
         
  
