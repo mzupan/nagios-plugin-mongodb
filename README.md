@@ -19,7 +19,7 @@ Edit your commands.cfg and add the following
 <pre><code>
 define command {
     command_name    check_mongodb
-    command_line    $USER1$/nagios-plugin-mongodb/check_mongodb.py -H $HOSTADDRESS$ -P $ARG1$ -A $ARG2$ -W $ARG3$ -C $ARG4$
+    command_line    $USER1$/nagios-plugin-mongodb/check_mongodb.py -H $HOSTADDRESS$ -A $ARG1$ -P $ARG2$ -W $ARG3$ -C $ARG4$
 }
 </code></pre>
 
