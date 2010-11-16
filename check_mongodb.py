@@ -9,6 +9,7 @@
 # Contributers
 #   - Mike Zupan <mike@zcentric.com> <mzupan@theopenskyproject.com>
 #   - Frank Brandewiede <brande@travel-iq.com> <brande@bfiw.de> <brande@novolab.de>
+#   - Same Perman <sam@brightcove.com>
 #
 # USAGE
 #
@@ -162,31 +163,31 @@ def check_rep_lag(host, port, warning, critical):
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
         
-        try:
-            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1), ('repl', 2)]))
-        except:
-            data = con.admin.command(pymongo.son.SON([('serverStatus', 1), ('repl', 2)]))
-            
-        #
-        # right now this will work for master/slave and replication pairs. It will have to be 
-        # fixed for replication sets when they become final
-        #
-        try:
-            lag = int(float(data['repl']['sources'][0]['lagSeconds']))
-        except:
-            print "Not setup for master/slave."
-            sys.exit(1)
-        
-        if lag >= critical:
-            print "CRITICAL - Replication lag: %i" % lag
-            sys.exit(2)
-        elif lag >= warning:
-            print "WARNING - Replication lag: %i" % lag
-            sys.exit(1)
-        else:
-            print "OK - Replication lag: %i" % lag
+        isMasterStatus = con.admin.command("ismaster", "1")
+        if not isMasterStatus['ismaster']:
+            print "OK - This is a slave."
             sys.exit(0)
         
+        masterOpLog = con.local['oplog.rs']
+        lastMasterOpTime = masterOpLog.find_one(sort=[('$natural', -1)])['ts'].time
+        slaves = con.local.slaves.find()
+
+        lag = 0
+        for slave in slaves:
+            lastSlaveOpTime = slave['syncedTo'].time
+            replicationLag = lastMasterOpTime - lastSlaveOpTime
+            lag = max(lag, replicationLag)
+
+            if lag >= critical:
+                print "CRITICAL - Replication lag: %i" % lag
+                sys.exit(2)
+            elif lag >= warning:
+                print "WARNING - Replication lag: %i" % lag
+                sys.exit(1)
+            else:
+                print "OK - Replication lag: %i" % lag
+                sys.exit(0)
+            
  
     except pymongo.errors.ConnectionFailure:
         print "CRITICAL - Connection to MongoDB failed!"
@@ -244,13 +245,13 @@ def check_lock(host, port, warning, critical):
         critical = float(critical)
         
         if lock >= critical:
-            print "CRITICAL - Lock Percentage: %s" % ("%.2f" % round(lock,2))
+            print "CRITICAL - Lock Percentage: %s" % ("%.2f" % round(lock, 2))
             sys.exit(2)
         elif lock >= warning:
-            print "WARNING - Lock Percentage: %s" % ("%.2f" % round(lock,2))
+            print "WARNING - Lock Percentage: %s" % ("%.2f" % round(lock, 2))
             sys.exit(1)
         else:
-            print "OK - Lock Percentage: %s" % ("%.2f" % round(lock,2))
+            print "OK - Lock Percentage: %s" % ("%.2f" % round(lock, 2))
             sys.exit(0)
         
  
@@ -274,13 +275,13 @@ def check_flushing(host, port, warning, critical):
         critical = float(critical)
 
         if avg_flush >= critical:
-            print "CRITICAL - Avg Flush Time: %sms" % ("%.2f" % round(avg_flush,2))
+            print "CRITICAL - Avg Flush Time: %sms" % ("%.2f" % round(avg_flush, 2))
             sys.exit(2)
         elif avg_flush >= warning:
-            print "WARNING - Avg Flush Time: %sms" % ("%.2f" % round(avg_flush,2))
+            print "WARNING - Avg Flush Time: %sms" % ("%.2f" % round(avg_flush, 2))
             sys.exit(1)
         else:
-            print "OK - Avg Flush Time: %sms" % ("%.2f" % round(avg_flush,2))
+            print "OK - Avg Flush Time: %sms" % ("%.2f" % round(avg_flush, 2))
             sys.exit(0)
 
 
