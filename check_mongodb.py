@@ -9,7 +9,7 @@
 # Contributers
 #   - Mike Zupan <mike@zcentric.com> <mzupan@theopenskyproject.com>
 #   - Frank Brandewiede <brande@travel-iq.com> <brande@bfiw.de> <brande@novolab.de>
-#   - Same Perman <sam@brightcove.com>
+#   - Sam Perman <sam@brightcove.com>
 #
 # USAGE
 #
