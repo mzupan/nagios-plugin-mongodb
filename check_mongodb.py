@@ -172,21 +172,25 @@ def check_rep_lag(host, port, warning, critical):
         lastMasterOpTime = masterOpLog.find_one(sort=[('$natural', -1)])['ts'].time
         slaves = con.local.slaves.find()
 
+        data = ";"
         lag = 0
         for slave in slaves:
             lastSlaveOpTime = slave['syncedTo'].time
             replicationLag = lastMasterOpTime - lastSlaveOpTime
+            data = data + slave["host"] + " lag=" + str(replicationLag) + "; "
             lag = max(lag, replicationLag)
 
-            if lag >= critical:
-                print "CRITICAL - Replication lag: %i" % lag
-                sys.exit(2)
-            elif lag >= warning:
-                print "WARNING - Replication lag: %i" % lag
-                sys.exit(1)
-            else:
-                print "OK - Replication lag: %i" % lag
-                sys.exit(0)
+        data = data[1:len(data)]
+
+        if lag >= critical:
+            print "CRITICAL - Max replication lag: %i [%s]" % (lag, data)
+            sys.exit(2)
+        elif lag >= warning:
+            print "WARNING - Max replication lag: %i [%s]" % (lag, data)
+            sys.exit(1)
+        else:
+            print "OK - Max replication lag: %i [%s]" % (lag, data)
+            sys.exit(0)
             
  
     except pymongo.errors.ConnectionFailure:
