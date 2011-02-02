@@ -57,8 +57,7 @@ def main(argv):
        usage()
        sys.exit(2)
 
-    p = optparse.OptionParser(conflict_handler="resolve", description=\
-                "This Nagios plugin checks the health of mongodb. ")
+    p = optparse.OptionParser(conflict_handler="resolve", description= "This Nagios plugin checks the health of mongodb.")
 
     p.add_option('-H', '--host', action='store', type='string', dest='host', default='127.0.0.1', help='            -H : The hostname you want to connect to')
     p.add_option('-P', '--port', action='store', type='string', dest='port', default='27017', help='            -P : The port mongodb is runnung on')
@@ -249,13 +248,13 @@ def check_lock(host, port, warning, critical):
         critical = float(critical)
         
         if lock >= critical:
-            print "CRITICAL - Lock Percentage: %s" % ("%.2f" % round(lock, 2))
+            print "CRITICAL - Lock Percentage: %.2f" % round(lock, 2)
             sys.exit(2)
         elif lock >= warning:
-            print "WARNING - Lock Percentage: %s" % ("%.2f" % round(lock, 2))
+            print "WARNING - Lock Percentage: %.2f" % round(lock, 2)
             sys.exit(1)
         else:
-            print "OK - Lock Percentage: %s" % ("%.2f" % round(lock, 2))
+            print "OK - Lock Percentage: %.2f" % round(lock, 2)
             sys.exit(0)
         
  
@@ -279,13 +278,13 @@ def check_flushing(host, port, warning, critical):
         critical = float(critical)
 
         if avg_flush >= critical:
-            print "CRITICAL - Avg Flush Time: %sms" % ("%.2f" % round(avg_flush, 2))
+            print "CRITICAL - Avg Flush Time: %.2fms" % round(avg_flush, 2)
             sys.exit(2)
         elif avg_flush >= warning:
-            print "WARNING - Avg Flush Time: %sms" % ("%.2f" % round(avg_flush, 2))
+            print "WARNING - Avg Flush Time: %.2fms" % round(avg_flush, 2)
             sys.exit(1)
         else:
-            print "OK - Avg Flush Time: %sms" % ("%.2f" % round(avg_flush, 2))
+            print "OK - Avg Flush Time: %.2fms" % round(avg_flush, 2)
             sys.exit(0)
 
 
