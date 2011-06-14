@@ -116,12 +116,12 @@ def check_connect(host, port, warning, critical):
         conn_time = time.time() - start
         conn_time = round(conn_time, 0)
 
-        if conn_time >= warning:
-            print "WARNING - Connection took %i seconds" % int(conn_time)
-            sys.exit(1)
-        elif conn_time >= critical:
+        if conn_time >= critical:
             print "CRITICAL - Connection took %i seconds" % int(conn_time)
             sys.exit(2)
+        elif conn_time >= warning:
+            print "WARNING - Connection took %i seconds" % int(conn_time)
+            sys.exit(1)
             
         print "OK - Connection accepted"
         sys.exit(0)
