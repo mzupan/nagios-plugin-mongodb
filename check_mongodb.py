@@ -169,6 +169,12 @@ def check_rep_lag(host, port, warning, critical):
         
         rs_status = con.admin.command("replSetGetStatus") 
 
+        rs_conf = con.local.system.replset.find_one()
+
+        slaveDelays={}
+        for member in rs_conf['members']:
+            slaveDelays[member['host']] = member.get('slaveDelay') if member.get('slaveDelay') is not None else 0
+        
         for member in rs_status['members']:
             if member['stateStr'] == 'PRIMARY':
                 lastMasterOpTime = member['optime'].time
@@ -178,10 +184,9 @@ def check_rep_lag(host, port, warning, critical):
         for member in rs_status['members']:
             if member['stateStr'] == 'SECONDARY':
                 lastSlaveOpTime = member['optime'].time
-                replicationLag = lastMasterOpTime - lastSlaveOpTime
+                replicationLag = lastMasterOpTime - lastSlaveOpTime - slaveDelays[member['name']]
                 data = data + member['name'] + " lag=" + str(replicationLag) + "; "
                 lag = max(lag, replicationLag)
-
 
         data = data[0:len(data)-2]
 
@@ -340,7 +345,6 @@ def check_replset_state(host, port):
     except pymongo.errors.ConnectionFailure:
         print "CRITICAL - Connection to MongoDB failed!"
         sys.exit(2)
-
 
 
 #
