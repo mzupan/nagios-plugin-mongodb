@@ -15,7 +15,6 @@
 #
 # See the README.md
 #
-from StdSuites.Type_Names_Suite import null
 
 import os
 import re
