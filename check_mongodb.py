@@ -141,7 +141,7 @@ def check_connections(host, port, warning, critical):
         current = float(data['connections']['current'])
         available = float(data['connections']['available'])
 
-        left_percent = int(float(current / available) * 100)
+        left_percent = int(float(current / (available + current)) * 100)
 
         if left_percent >= critical:
             print "CRITICAL -  %i percent (%i of %i connections) used" % (left_percent, current, available)
