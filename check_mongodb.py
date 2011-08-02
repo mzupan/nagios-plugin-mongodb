@@ -144,13 +144,13 @@ def check_connections(host, port, warning, critical):
         left_percent = int(float(current / (available + current)) * 100)
 
         if left_percent >= critical:
-            print "CRITICAL -  %i percent (%i of %i connections) used" % (left_percent, current, available)
+            print "CRITICAL -  %i percent (%i of %i connections) used" % (left_percent, current, current + available)
             sys.exit(2)
         elif left_percent >= warning:
-            print "WARNING - %i percent (%i of %i connections) used" % (left_percent, current, available)
+            print "WARNING - %i percent (%i of %i connections) used" % (left_percent, current, current + available)
             sys.exit(1)
         else:
-            print "OK - %i percent (%i of %i connections) used" % (left_percent, current, available)
+            print "OK - %i percent (%i of %i connections) used" % (left_percent, current, current + available)
             sys.exit(0)
 
     except pymongo.errors.ConnectionFailure:
