@@ -44,6 +44,7 @@ def usage():
     print "        - memory: checks the resident memory used by mongodb in gigabytes"
     print "        - lock: checks percentage of lock time for the server"
     print "        - flushing: checks the average flush time the server"
+    print "        - last_flush_time: instantaneous flushing time in ms"
     print "        - replset_state: State of the node within a replset configuration"
     print "  -P : The port MongoDB is running on (defaults to 27017)"
     print "  -W : The warning threshold we want to set"
@@ -103,7 +104,9 @@ def main(argv):
     elif action == "lock":
         check_lock(host, port, warning, critical)        
     elif action == "flushing":
-        check_flushing(host, port, warning, critical)
+        check_flushing(host, port, warning, critical, True)
+    elif action == "last_flush_time":
+        check_flushing(host, port, warning, critical, False)
     else:
         check_connect(host, port, warning, critical)
 
@@ -244,9 +247,9 @@ def check_lock(host, port, warning, critical):
             data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
         
         #
-        # convert to gigs
+        # calculate percentage
         #  
-        lock = float(data['globalLock']['lockTime']) / float(data['globalLock']['totalTime'])
+        lock = float(data['globalLock']['lockTime']) / float(data['globalLock']['totalTime']) * 100
 
         warning = float(warning)
         critical = float(critical)
@@ -267,7 +270,7 @@ def check_lock(host, port, warning, critical):
         sys.exit(2)
 
 
-def check_flushing(host, port, warning, critical):
+def check_flushing(host, port, warning, critical, avg):
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
 
@@ -276,19 +279,23 @@ def check_flushing(host, port, warning, critical):
         except:
             data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
 
-        avg_flush = float(data['backgroundFlushing']['average_ms'])
-
+        if avg:
+            flush_time = float(data['backgroundFlushing']['average_ms'])
+            stat_type = "Avg"
+        else:
+            flush_time = float(data['backgroundFlushing']['last_ms'])
+            stat_type = "Last"
         warning = float(warning)
         critical = float(critical)
 
-        if avg_flush >= critical:
-            print "CRITICAL - Avg Flush Time: %.2fms" % round(avg_flush, 2)
+        if flush_time >= critical:
+            print "CRITICAL - %s Flush Time: %.2fms" % (stat_type, round(flush_time, 2))
             sys.exit(2)
-        elif avg_flush >= warning:
-            print "WARNING - Avg Flush Time: %.2fms" % round(avg_flush, 2)
+        elif flush_time >= warning:
+            print "WARNING - %s Flush Time: %.2fms" % (stat_type, round(flush_time, 2))
             sys.exit(1)
         else:
-            print "OK - Avg Flush Time: %.2fms" % round(avg_flush, 2)
+            print "OK - %s Flush Time: %.2fms" % (stat_type, round(flush_time, 2))
             sys.exit(0)
 
 
