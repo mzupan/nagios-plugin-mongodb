@@ -191,6 +191,7 @@ def check_rep_lag(host, port, warning, critical):
                 data = data + member['name'] + " lag=" + str(replicationLag) + "; "
                 lag = max(lag, replicationLag)
 
+
         data = data[0:len(data)-2]
 
         if lag >= critical:
