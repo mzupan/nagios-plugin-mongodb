@@ -7,7 +7,7 @@
 # Script idea taken from a Tag1 script I found and I modified it a lot
 #
 # Contributers
-#   - Mike Zupan <mike@zcentric.com> <mzupan@theopenskyproject.com>
+#   - Mike Zupan <mike@zcentric.com> (original author)
 #   - Frank Brandewiede <brande@travel-iq.com> <brande@bfiw.de> <brande@novolab.de>
 #   - Sam Perman <sam@brightcove.com>
 #
