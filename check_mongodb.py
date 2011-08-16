@@ -6,10 +6,13 @@
 
 # Script idea taken from a Tag1 script I found and I modified it a lot
 #
+# Main Author
+#   - Mike Zupan <mike@zcentric.com>
 # Contributers
-#   - Mike Zupan <mike@zcentric.com> (original author)
 #   - Frank Brandewiede <brande@travel-iq.com> <brande@bfiw.de> <brande@novolab.de>
 #   - Sam Perman <sam@brightcove.com>
+#   - @shlomoid on github
+#   - @jhoff909 on github
 #
 # USAGE
 #
