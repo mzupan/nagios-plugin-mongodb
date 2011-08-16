@@ -20,7 +20,6 @@
 #
 
 import os
-import re
 import sys
 import getopt
 import time
@@ -77,25 +76,20 @@ def main(argv):
     critical_string = options.critical
     action = options.action
 
-    sregex = re.compile('[a-zA-Z]+')
-
-    sresult = sregex.search(port_string)
-    if sresult:
+    try:
+        port = int(port)
+    except ValueError:
         port = 27017
-    else:
-        port = int(port_string)
-
-    sresult = sregex.search(warning_string)
-    if sresult:
+        
+    try:
+        warning = float(warning_string)
+    except ValueError:
         warning = 2
-    else:
-        warning = int(warning_string)
 
-    sresult = sregex.search(critical_string)
-    if sresult:
+    try:
+        critical = float(critical_string)
+    except ValueError:
         critical = 5
-    else:
-        critical = int(critical_string)
 
     if action == "connections":
         check_connections(host, port, warning, critical)
@@ -230,9 +224,6 @@ def check_memory(host, port, warning, critical):
         #  
         mem = float(data['mem']['resident']) / 1000.0
         
-        warning = float(warning)
-        critical = float(critical)
-        
         if mem >= critical:
             print "CRITICAL - Memory Usage: %f GByte" % mem
             sys.exit(2)
@@ -262,9 +253,6 @@ def check_lock(host, port, warning, critical):
         # calculate percentage
         #  
         lock = float(data['globalLock']['lockTime']) / float(data['globalLock']['totalTime']) * 100
-
-        warning = float(warning)
-        critical = float(critical)
         
         if lock >= critical:
             print "CRITICAL - Lock Percentage: %.2f" % lock
@@ -297,8 +285,6 @@ def check_flushing(host, port, warning, critical, avg):
         else:
             flush_time = float(data['backgroundFlushing']['last_ms'])
             stat_type = "Last"
-        warning = float(warning)
-        critical = float(critical)
 
         if flush_time >= critical:
             print "CRITICAL - %s Flush Time: %.2fms" % (stat_type, flush_time)
@@ -326,9 +312,6 @@ def index_miss_ratio(host, port, warning, critical):
 
 
         miss_ratio = float(data['indexCounters']['btree']['missRatio'])
-
-        warning = float(warning)
-        critical = float(critical)
 
         if miss_ratio >= critical:
             print "CRITICAL - Miss Ratio: %.4f" % miss_ratio
