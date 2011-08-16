@@ -49,6 +49,7 @@ def usage():
     print "        - flushing: checks the average flush time the server"
     print "        - last_flush_time: instantaneous flushing time in ms"
     print "        - replset_state: State of the node within a replset configuration"
+	print "        - index_miss_ratio: Check the index miss ratio on queries"
     print "  -P : The port MongoDB is running on (defaults to 27017)"
     print "  -W : The warning threshold we want to set"
     print "  -C : The critical threshold we want to set"
@@ -110,6 +111,8 @@ def main(argv):
         check_flushing(host, port, warning, critical, True)
     elif action == "last_flush_time":
         check_flushing(host, port, warning, critical, False)
+	elif action == "index_miss_ratio":
+		index_miss_ratio(host, port, warning, critical)
     else:
         check_connect(host, port, warning, critical)
 
@@ -312,6 +315,35 @@ def check_flushing(host, port, warning, critical, avg):
         print "CRITICAL - Connection to MongoDB failed!"
         sys.exit(2)
 
+def index_miss_ratio(host, port, warning, critical):
+	try:
+        con = pymongo.Connection(host, port, slave_okay=True)
+
+        try:
+            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
+        except:
+            data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
+
+
+        miss_ratio = float(data['indexCounters']['btree']['missRatio'])
+
+        warning = float(warning)
+        critical = float(critical)
+
+        if miss_ratio >= critical:
+            print "CRITICAL - Miss Ratio: %.4f" % miss_ratio
+            sys.exit(2)
+        elif miss_ratio >= warning:
+            print "WARNING - Miss Ratio: %.4f" % miss_ratio
+            sys.exit(1)
+        else:
+            print "OK - Miss Ratio: %.4f" % miss_ratio
+            sys.exit(0)
+
+
+    except pymongo.errors.ConnectionFailure:
+        print "CRITICAL - Connection to MongoDB failed!"
+        sys.exit(2)
 
 def check_replset_state(host, port):
     try:
