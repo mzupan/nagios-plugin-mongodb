@@ -44,6 +44,7 @@ def usage():
     print "        - memory: checks the resident memory used by mongodb in gigabytes"
     print "        - lock: checks percentage of lock time for the server"
     print "        - flushing: checks the average flush time the server"
+    print "        - last_flush_time: instantaneous flushing time in ms"
     print "        - replset_state: State of the node within a replset configuration"
     print "  -P : The port MongoDB is running on (defaults to 27017)"
     print "  -W : The warning threshold we want to set"
@@ -103,7 +104,9 @@ def main(argv):
     elif action == "lock":
         check_lock(host, port, warning, critical)        
     elif action == "flushing":
-        check_flushing(host, port, warning, critical)
+        check_flushing(host, port, warning, critical, True)
+    elif action == "last_flush_time":
+        check_flushing(host, port, warning, critical, False)
     else:
         check_connect(host, port, warning, critical)
 
@@ -141,16 +144,16 @@ def check_connections(host, port, warning, critical):
         current = float(data['connections']['current'])
         available = float(data['connections']['available'])
 
-        left_percent = int(float(current / available) * 100)
+        left_percent = int(float(current / (available + current)) * 100)
 
         if left_percent >= critical:
-            print "CRITICAL -  %i percent (%i of %i connections) used" % (left_percent, current, available)
+            print "CRITICAL -  %i percent (%i of %i connections) used" % (left_percent, current, current + available)
             sys.exit(2)
         elif left_percent >= warning:
-            print "WARNING - %i percent (%i of %i connections) used" % (left_percent, current, available)
+            print "WARNING - %i percent (%i of %i connections) used" % (left_percent, current, current + available)
             sys.exit(1)
         else:
-            print "OK - %i percent (%i of %i connections) used" % (left_percent, current, available)
+            print "OK - %i percent (%i of %i connections) used" % (left_percent, current, current + available)
             sys.exit(0)
 
     except pymongo.errors.ConnectionFailure:
@@ -167,19 +170,29 @@ def check_rep_lag(host, port, warning, critical):
             print "OK - This is a slave."
             sys.exit(0)
         
-        masterOpLog = con.local['oplog.rs']
-        lastMasterOpTime = masterOpLog.find_one(sort=[('$natural', -1)])['ts'].time
-        slaves = con.local.slaves.find()
+        rs_status = con.admin.command("replSetGetStatus") 
 
-        data = ";"
+        rs_conf = con.local.system.replset.find_one()
+
+        slaveDelays={}
+        for member in rs_conf['members']:
+            slaveDelays[member['host']] = member.get('slaveDelay') if member.get('slaveDelay') is not None else 0
+        
+        for member in rs_status['members']:
+            if member['stateStr'] == 'PRIMARY':
+                lastMasterOpTime = member['optime'].time
+
+        data = ""
         lag = 0
-        for slave in slaves:
-            lastSlaveOpTime = slave['syncedTo'].time
-            replicationLag = lastMasterOpTime - lastSlaveOpTime
-            data = data + slave["host"] + " lag=" + str(replicationLag) + "; "
-            lag = max(lag, replicationLag)
+        for member in rs_status['members']:
+            if member['stateStr'] == 'SECONDARY':
+                lastSlaveOpTime = member['optime'].time
+                replicationLag = lastMasterOpTime - lastSlaveOpTime - slaveDelays[member['name']]
+                data = data + member['name'] + " lag=" + str(replicationLag) + "; "
+                lag = max(lag, replicationLag)
 
-        data = data[1:len(data)]
+
+        data = data[0:len(data)-2]
 
         if lag >= critical:
             print "CRITICAL - Max replication lag: %i [%s]" % (lag, data)
@@ -240,9 +253,9 @@ def check_lock(host, port, warning, critical):
             data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
         
         #
-        # convert to gigs
+        # calculate percentage
         #  
-        lock = float(data['globalLock']['lockTime']) / float(data['globalLock']['totalTime'])
+        lock = float(data['globalLock']['lockTime']) / float(data['globalLock']['totalTime']) * 100
 
         warning = float(warning)
         critical = float(critical)
@@ -263,7 +276,7 @@ def check_lock(host, port, warning, critical):
         sys.exit(2)
 
 
-def check_flushing(host, port, warning, critical):
+def check_flushing(host, port, warning, critical, avg):
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
 
@@ -272,19 +285,23 @@ def check_flushing(host, port, warning, critical):
         except:
             data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
 
-        avg_flush = float(data['backgroundFlushing']['average_ms'])
-
+        if avg:
+            flush_time = float(data['backgroundFlushing']['average_ms'])
+            stat_type = "Avg"
+        else:
+            flush_time = float(data['backgroundFlushing']['last_ms'])
+            stat_type = "Last"
         warning = float(warning)
         critical = float(critical)
 
-        if avg_flush >= critical:
-            print "CRITICAL - Avg Flush Time: %.2fms" % round(avg_flush, 2)
+        if flush_time >= critical:
+            print "CRITICAL - %s Flush Time: %.2fms" % (stat_type, round(flush_time, 2))
             sys.exit(2)
-        elif avg_flush >= warning:
-            print "WARNING - Avg Flush Time: %.2fms" % round(avg_flush, 2)
+        elif flush_time >= warning:
+            print "WARNING - %s Flush Time: %.2fms" % (stat_type, round(flush_time, 2))
             sys.exit(1)
         else:
-            print "OK - Avg Flush Time: %.2fms" % round(avg_flush, 2)
+            print "OK - %s Flush Time: %.2fms" % (stat_type, round(flush_time, 2))
             sys.exit(0)
 
 
@@ -336,7 +353,6 @@ def check_replset_state(host, port):
     except pymongo.errors.ConnectionFailure:
         print "CRITICAL - Connection to MongoDB failed!"
         sys.exit(2)
-
 
 
 #
