@@ -301,13 +301,13 @@ def check_flushing(host, port, warning, critical, avg):
         critical = float(critical)
 
         if flush_time >= critical:
-            print "CRITICAL - %s Flush Time: %.2fms" % (stat_type, round(flush_time, 2))
+            print "CRITICAL - %s Flush Time: %.2fms" % (stat_type, flush_time)
             sys.exit(2)
         elif flush_time >= warning:
-            print "WARNING - %s Flush Time: %.2fms" % (stat_type, round(flush_time, 2))
+            print "WARNING - %s Flush Time: %.2fms" % (stat_type, flush_time)
             sys.exit(1)
         else:
-            print "OK - %s Flush Time: %.2fms" % (stat_type, round(flush_time, 2))
+            print "OK - %s Flush Time: %.2fms" % (stat_type, flush_time)
             sys.exit(0)
 
 
