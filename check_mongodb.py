@@ -49,7 +49,7 @@ def usage():
     print "        - flushing: checks the average flush time the server"
     print "        - last_flush_time: instantaneous flushing time in ms"
     print "        - replset_state: State of the node within a replset configuration"
-	print "        - index_miss_ratio: Check the index miss ratio on queries"
+    print "        - index_miss_ratio: Check the index miss ratio on queries"
     print "  -P : The port MongoDB is running on (defaults to 27017)"
     print "  -W : The warning threshold we want to set"
     print "  -C : The critical threshold we want to set"
@@ -111,8 +111,8 @@ def main(argv):
         check_flushing(host, port, warning, critical, True)
     elif action == "last_flush_time":
         check_flushing(host, port, warning, critical, False)
-	elif action == "index_miss_ratio":
-		index_miss_ratio(host, port, warning, critical)
+    elif action == "index_miss_ratio":
+        index_miss_ratio(host, port, warning, critical)
     else:
         check_connect(host, port, warning, critical)
 
@@ -316,7 +316,7 @@ def check_flushing(host, port, warning, critical, avg):
         sys.exit(2)
 
 def index_miss_ratio(host, port, warning, critical):
-	try:
+    try:
         con = pymongo.Connection(host, port, slave_okay=True)
 
         try:
