@@ -7,12 +7,12 @@ This is a simple Nagios check script to monitor your MongoDB server(s).
 ## Authors
 
 ### Main Author
- Mike Zupan <mike@zcentric.com>
+ Mike Zupan mike -(at)- zcentric.com
 ### Contributers
- Frank Brandewiede <brande@travel-iq.com> <brande@bfiw.de> <brande@novolab.de>
- Sam Perman <sam@brightcove.com>
- @shlomoid on github
- @jhoff909 on github
+ - Frank Brandewiede <brande -(at)- travel-iq.com> <brande -(at)- bfiw.de> <brande -(at)- novolab.de>
+ - Sam Perman <sam -(at)- brightcove.com>
+ - @shlomoid on github
+ - @jhoff909 on github
 
 ## Installation
 
