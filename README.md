@@ -114,3 +114,15 @@ define service {
       check_command           check_mongodb!replset_state!27017
 }
 </code></pre>
+
+#### Check status of index miss ratio
+This is a test that will check the ratio of index hits to misses. If the ratio is high, you should consider adding indexes. I want to get a warning if the ratio is above .005 and get an error if it's above .01
+
+<pre><code>
+define service {
+      use                     generic-service
+      hostgroup_name          Mongo Servers
+      service_description     MongoDB state
+      check_command           check_mongodb!index_miss_ratio!27017!.005|.01
+}
+</code></pre>
