@@ -103,6 +103,19 @@ define service {
 }
 </code></pre>
 
+#### Check Last Flush Time
+
+This is a test that will check the last flush time of Mongo server. In my example my Mongo I want to be warned if the last flush time is above 200ms and get an error if it's above 400ms. When you start to get a high flush time it means your server might be needing faster disk or its time to shard.
+
+<pre><code>
+define service {
+    use                 generic-service
+    hostgroup_name          Mongo Servers
+    service_description     Mongo Flush Average
+    check_command           check_mongodb!last_flush_time!27017!200!400
+}
+</code></pre>
+
 #### Check status of mongodb replicaset
 This is a test that will check the status of nodes within a replicaset. Depending which status it is it sends a waring during status 0, 3 and 5, critical if the status is 4, 6 or 8 and a ok with status 1, 2 and 7.
 
