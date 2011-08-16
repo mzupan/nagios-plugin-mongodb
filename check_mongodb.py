@@ -267,13 +267,13 @@ def check_lock(host, port, warning, critical):
         critical = float(critical)
         
         if lock >= critical:
-            print "CRITICAL - Lock Percentage: %.2f" % round(lock, 2)
+            print "CRITICAL - Lock Percentage: %.2f" % lock
             sys.exit(2)
         elif lock >= warning:
-            print "WARNING - Lock Percentage: %.2f" % round(lock, 2)
+            print "WARNING - Lock Percentage: %.2f" % lock
             sys.exit(1)
         else:
-            print "OK - Lock Percentage: %.2f" % round(lock, 2)
+            print "OK - Lock Percentage: %.2f" % lock
             sys.exit(0)
         
  
