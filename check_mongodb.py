@@ -77,7 +77,7 @@ def main(argv):
     action = options.action
 
     try:
-        port = int(port)
+        port = int(port_string)
     except ValueError:
         port = 27017
         
