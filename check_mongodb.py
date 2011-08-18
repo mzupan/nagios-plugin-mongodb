@@ -161,8 +161,8 @@ def check_connections(host, port, warning, critical, perf_data):
         message = "%i percent (%i of %i connections) used" % (used_percent, current, current + available)
         if perf_data:
             message += " | used_percent=%i%%;%i;%i" % (used_percent, warning, critical)
-            message += ",current_connections=%i" % current
-            message += ",available_connections=%i" % available
+            message += " current_connections=%i" % current
+            message += " available_connections=%i" % available
         if used_percent >= critical:
             print "CRITICAL - " + message
             sys.exit(2)
@@ -257,8 +257,8 @@ def check_memory(host, port, warning, critical, perf_data):
         message = "Memory Usage: %.2fGB resident, %.2fGB mapped, %.2fGB virtual" % (mem_resident, mem_mapped, mem_virtual)
         if perf_data:
             message += " | memory_usage=%.3fGB;%.3f;%.3f" % (mem_resident, warning, critical)
-            message += ",memory_mapped=%.3fGB" % mem_mapped
-            message += ",memory_virtual=%.3fGB" % mem_virtual
+            message += " memory_mapped=%.3fGB" % mem_mapped
+            message += " memory_virtual=%.3fGB" % mem_virtual
         if mem_resident >= critical:
             print "CRITICAL - " + message
             sys.exit(2)
