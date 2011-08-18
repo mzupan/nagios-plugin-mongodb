@@ -176,7 +176,10 @@ def check_rep_lag(host, port, warning, critical):
 
         slaveDelays={}
         for member in rs_conf['members']:
-            slaveDelays[member['host']] = member.get('slaveDelay') if member.get('slaveDelay') is not None else 0
+            if member.get('slaveDelay') is not None:
+                slaveDelays[member['host']] = member.get('slaveDelay')
+            else:
+                slaveDelays[member['host']] = 0
         
         for member in rs_status['members']:
             if member['stateStr'] == 'PRIMARY':
