@@ -170,17 +170,25 @@ def check_rep_lag(host, port, warning, critical):
             print "OK - This is a slave."
             sys.exit(0)
         
-        rs_status = con.admin.command("replSetGetStatus") 
-
-        rs_conf = con.local.system.replset.find_one()
-
-        slaveDelays={}
-        for member in rs_conf['members']:
-            if member.get('slaveDelay') is not None:
-                slaveDelays[member['host']] = member.get('slaveDelay')
-            else:
-                slaveDelays[member['host']] = 0
+        rs_status = con.admin.command("replSetGetStatus")
         
+        slaveDelays={}
+        
+        try:
+            #
+            # this query fails if --keyfile is enabled
+            #
+            rs_conf = con.local.system.replset.find_one()
+            
+            for member in rs_conf['members']:
+                if member.get('slaveDelay') is not None:
+                    slaveDelays[member['host']] = member.get('slaveDelay')
+                else:
+                    slaveDelays[member['host']] = 0
+        except:
+            for member in rs_status['members']:
+                slaveDelays[member['name']] = 0
+
         for member in rs_status['members']:
             if member['stateStr'] == 'PRIMARY':
                 lastMasterOpTime = member['optime'].time
