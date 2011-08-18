@@ -63,8 +63,8 @@ def main(argv):
 
     p.add_option('-H', '--host', action='store', type='string', dest='host', default='127.0.0.1', help='            -H : The hostname you want to connect to')
     p.add_option('-P', '--port', action='store', type='string', dest='port', default='27017', help='            -P : The port mongodb is runnung on')
-    p.add_option('-W', '--warning', action='store', type='string', dest='warning', default='2', help='            -W : The warning threshold we want to set')
-    p.add_option('-C', '--critical', action='store', type='string', dest='critical', default='5', help='            -C : The critical threshold we want to set')
+    p.add_option('-W', '--warning', action='store', type='string', dest='warning', default=None, help='            -W : The warning threshold we want to set')
+    p.add_option('-C', '--critical', action='store', type='string', dest='critical', default=None, help='            -C : The critical threshold we want to set')
     p.add_option('-A', '--action', action='store', type='string', dest='action', default='connect', help='            -A : The action you want to take')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='            -D : Enable output of Nagios performance data')
     options, arguments = p.parse_args()
@@ -83,13 +83,13 @@ def main(argv):
 
     try:
         warning = float(warning_string)
-    except ValueError:
-        warning = 2
+    except (ValueError, TypeError):
+        warning = None
 
     try:
         critical = float(critical_string)
-    except ValueError:
-        critical = 5
+    except (ValueError, TypeError):
+        critical = None
 
     if action == "connections":
         check_connections(host, port, warning, critical, perf_data)
@@ -117,6 +117,9 @@ def exit_with_connection_critical():
 
 
 def check_connect(host, port, warning, critical, perf_data):
+    warning = warning or 3
+    critical = critical or 6
+    if not warning: warning = 5
     try:
         start = time.time()
         con = pymongo.Connection(host, port, slave_okay=True, network_timeout=critical)
@@ -142,6 +145,8 @@ def check_connect(host, port, warning, critical, perf_data):
 
 
 def check_connections(host, port, warning, critical, perf_data):
+    warning = warning or 80
+    critical = critical or 95
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
         try:
@@ -173,6 +178,8 @@ def check_connections(host, port, warning, critical, perf_data):
 
 
 def check_rep_lag(host, port, warning, critical, perf_data):
+    warning = warning or 600
+    critical = critical or 3600
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
 
@@ -225,6 +232,11 @@ def check_rep_lag(host, port, warning, critical, perf_data):
 
 
 def check_memory(host, port, warning, critical, perf_data):
+    #
+    # These thresholds are basically meaningless, and must be customized to your system's ram
+    #
+    warning = warning or 8
+    critical = critical or 16
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
 
@@ -262,6 +274,8 @@ def check_memory(host, port, warning, critical, perf_data):
 
 
 def check_lock(host, port, warning, critical, perf_data):
+    warning = warning or 10
+    critical = critical or 30
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
 
@@ -294,6 +308,12 @@ def check_lock(host, port, warning, critical, perf_data):
 
 
 def check_flushing(host, port, warning, critical, avg, perf_data):
+    #
+    # These thresholds mean it's taking 5 seconds to perform a background flush to issue a warning
+    # and 10 seconds to issue a critical.
+    #
+    warning = warning or 5000
+    critical = critical or 15000
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
 
@@ -328,6 +348,8 @@ def check_flushing(host, port, warning, critical, avg, perf_data):
 
 
 def index_miss_ratio(host, port, warning, critical, perf_data):
+    warning = warning or 10
+    critical = critical or 30
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
 
@@ -336,7 +358,16 @@ def index_miss_ratio(host, port, warning, critical, perf_data):
         except:
             data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
 
-        miss_ratio = float(data['indexCounters']['btree']['missRatio'])
+        try:
+            miss_ratio = float(data['indexCounters']['btree']['missRatio'])
+        except KeyError:
+            not_supported_msg = "not supported on this platform"
+            if data['indexCounters']['note'] == not_supported_msg:
+                print "OK - MongoDB says: " + not_supported_msg
+                sys.exit(0)
+            else:
+                print "WARNING - Can't get counter from MongoDB"
+                sys.exit(1)
 
         message = "Miss Ratio: %.2f" % miss_ratio
         if perf_data:
