@@ -27,7 +27,7 @@ import textwrap
 try:
     import pymongo
 except:
-    print "need to install pymongo"
+    print "Need to install pymongo"
     sys.exit(2)
 
 def usage():
@@ -66,7 +66,7 @@ def main(argv):
     p.add_option('-W', '--warning', action='store', type='string', dest='warning', default='2', help='            -W : The warning threshold we want to set')
     p.add_option('-C', '--critical', action='store', type='string', dest='critical', default='5', help='            -C : The critical threshold we want to set')
     p.add_option('-A', '--action', action='store', type='string', dest='action', default='connect', help='            -A : The action you want to take')
-    p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='            -D : Enable output Nagios performance data')
+    p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='            -D : Enable output of Nagios performance data')
     options, arguments = p.parse_args()
 
     host = options.host
@@ -111,6 +111,11 @@ def main(argv):
         check_connect(host, port, warning, critical, perf_data)
 
 
+def exit_with_connection_critical():
+    print "CRITICAL - Connection to MongoDB failed!"
+    sys.exit(2)
+
+
 def check_connect(host, port, warning, critical, perf_data):
     try:
         start = time.time()
@@ -133,8 +138,7 @@ def check_connect(host, port, warning, critical, perf_data):
         print "OK - " + message
         sys.exit(0)
     except pymongo.errors.ConnectionFailure:
-        print "CRITICAL - Connection to MongoDB failed!"
-        sys.exit(2)
+        exit_with_connection_critical()
 
 
 def check_connections(host, port, warning, critical, perf_data):
@@ -165,13 +169,7 @@ def check_connections(host, port, warning, critical, perf_data):
             sys.exit(0)
 
     except pymongo.errors.ConnectionFailure:
-        print "CRITICAL - Connection to MongoDB failed!"
-        sys.exit(2)
-
-
-def exit_with_connection_critical():
-    print "CRITICAL - Connection to MongoDB failed!"
-    sys.exit(2)
+        exit_with_connection_critical()
 
 
 def check_rep_lag(host, port, warning, critical, perf_data):
