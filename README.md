@@ -146,6 +146,6 @@ define service {
       use                     generic-service
       hostgroup_name          Mongo Servers
       service_description     MongoDB state
-      check_command           check_mongodb!index_miss_ratio!27017!.005|.01
+      check_command           check_mongodb!index_miss_ratio!27017!.005!.01
 }
 </code></pre>
