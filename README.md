@@ -149,3 +149,22 @@ define service {
       check_command           check_mongodb!index_miss_ratio!27017!.005!.01
 }
 </code></pre>
+
+#### Check number of databases and number of collections
+These tests will count the number of databases and the number of collections. It is usefull e.g. when your application "leaks" databases or collections. Set the warning, critical level to fit your application.
+
+<pre><code>
+define service {
+      use                     generic-service
+      hostgroup_name          Mongo Servers
+      service_description     MongoDB Number of databases
+      check_command           check_mongodb!databases!27017!300!500
+}
+
+define service {
+      use                     generic-service
+      hostgroup_name          Mongo Servers
+      service_description     MongoDB Number of collections
+      check_command           check_mongodb!collections!27017!300!500
+}
+</code></pre>
