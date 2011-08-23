@@ -2,7 +2,7 @@
 
 #
 # A MongoDB Nagios check script
-# 
+#
 
 # Script idea taken from a Tag1 script I found and I modified it a lot
 #
@@ -13,6 +13,7 @@
 #   - Sam Perman <sam@brightcove.com>
 #   - @shlomoid on github
 #   - @jhoff909 on github
+#   - @jbraeuer on github
 #
 # USAGE
 #
@@ -33,7 +34,7 @@ except:
     sys.exit(2)
 
 def usage():
-    print 
+    print
     print "%s -H host -A action -P port -W warning -C critical" % sys.argv[0]
     print
     print "Below are the following flags you can use"
@@ -49,6 +50,8 @@ def usage():
     print "        - last_flush_time: instantaneous flushing time in ms"
     print "        - replset_state: State of the node within a replset configuration"
     print "        - index_miss_ratio: Check the index miss ratio on queries"
+    print "        - databases: Overall number of databases"
+    print "        - collections: Number of collections"
     print "  -P : The port MongoDB is running on (defaults to 27017)"
     print "  -W : The warning threshold we want to set"
     print "  -C : The critical threshold we want to set"
@@ -80,7 +83,7 @@ def main(argv):
         port = int(port_string)
     except ValueError:
         port = 27017
-        
+
     try:
         warning = float(warning_string)
     except ValueError:
@@ -100,13 +103,17 @@ def main(argv):
     elif action == "memory":
         check_memory(host, port, warning, critical)
     elif action == "lock":
-        check_lock(host, port, warning, critical)        
+        check_lock(host, port, warning, critical)
     elif action == "flushing":
         check_flushing(host, port, warning, critical, True)
     elif action == "last_flush_time":
         check_flushing(host, port, warning, critical, False)
     elif action == "index_miss_ratio":
         index_miss_ratio(host, port, warning, critical)
+    elif action == "databases":
+        check_databases(host, port, warning, critical)
+    elif action == "collections":
+        check_collections(host, port, warning, critical)
     else:
         check_connect(host, port, warning, critical)
 
@@ -115,7 +122,7 @@ def check_connect(host, port, warning, critical):
     try:
         start = time.time()
         con = pymongo.Connection(host, port, slave_okay=True, network_timeout=critical)
-        
+
         conn_time = time.time() - start
         conn_time = round(conn_time, 0)
 
@@ -125,7 +132,7 @@ def check_connect(host, port, warning, critical):
         elif conn_time >= warning:
             print "WARNING - Connection took %i seconds" % int(conn_time)
             sys.exit(1)
-            
+
         print "OK - Connection accepted"
         sys.exit(0)
     except pymongo.errors.ConnectionFailure:
@@ -140,7 +147,7 @@ def check_connections(host, port, warning, critical):
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1), ('repl', 1)]))
         except:
             data = con.admin.command(pymongo.son.SON([('serverStatus', 1), ('repl', 1)]))
-            
+
         current = float(data['connections']['current'])
         available = float(data['connections']['available'])
 
@@ -164,22 +171,22 @@ def check_connections(host, port, warning, critical):
 def check_rep_lag(host, port, warning, critical):
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
-        
+
         isMasterStatus = con.admin.command("ismaster", "1")
         if not isMasterStatus['ismaster']:
             print "OK - This is a slave."
             sys.exit(0)
-        
+
         rs_status = con.admin.command("replSetGetStatus")
-        
+
         slaveDelays={}
-        
+
         try:
             #
             # this query fails if --keyfile is enabled
             #
             rs_conf = con.local.system.replset.find_one()
-            
+
             for member in rs_conf['members']:
                 if member.get('slaveDelay') is not None:
                     slaveDelays[member['host']] = member.get('slaveDelay')
@@ -214,27 +221,27 @@ def check_rep_lag(host, port, warning, critical):
         else:
             print "OK - Max replication lag: %i [%s]" % (lag, data)
             sys.exit(0)
-            
- 
+
+
     except pymongo.errors.ConnectionFailure:
         print "CRITICAL - Connection to MongoDB failed!"
         sys.exit(2)
 
-        
+
 def check_memory(host, port, warning, critical):
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
-        
+
         try:
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
         except:
             data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
-        
+
         #
         # convert to gigs
-        #  
+        #
         mem = float(data['mem']['resident']) / 1000.0
-        
+
         if mem >= critical:
             print "CRITICAL - Memory Usage: %f GByte" % mem
             sys.exit(2)
@@ -244,27 +251,27 @@ def check_memory(host, port, warning, critical):
         else:
             print "OK - Memory Usage: %f GByte" % mem
             sys.exit(0)
-        
- 
+
+
     except pymongo.errors.ConnectionFailure:
         print "CRITICAL - Connection to MongoDB failed!"
         sys.exit(2)
-        
+
 
 def check_lock(host, port, warning, critical):
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
-        
+
         try:
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
         except:
             data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
-        
+
         #
         # calculate percentage
-        #  
+        #
         lock = float(data['globalLock']['lockTime']) / float(data['globalLock']['totalTime']) * 100
-        
+
         if lock >= critical:
             print "CRITICAL - Lock Percentage: %.2f" % lock
             sys.exit(2)
@@ -274,8 +281,8 @@ def check_lock(host, port, warning, critical):
         else:
             print "OK - Lock Percentage: %.2f" % lock
             sys.exit(0)
-        
- 
+
+
     except pymongo.errors.ConnectionFailure:
         print "CRITICAL - Connection to MongoDB failed!"
         sys.exit(2)
@@ -342,14 +349,14 @@ def index_miss_ratio(host, port, warning, critical):
 def check_replset_state(host, port):
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
-        
+
         try:
             data = con.admin.command(pymongo.son_manipulator.SON([('replSetGetStatus', 1)]))
         except:
             data = con.admin.command(pymongo.son.SON([('replSetGetStatus', 1)]))
-        
+
         state = int(data['myState'])
-        
+
         if state == 8:
             print "CRITICAL - State: %i (Down)" % state
             sys.exit(2)
@@ -377,12 +384,64 @@ def check_replset_state(host, port):
         else:
             print "CRITICAL - State: %i (Unknown state)" % state
             sys.exit(2)
-        
- 
+
+
     except pymongo.errors.ConnectionFailure:
         print "CRITICAL - Connection to MongoDB failed!"
         sys.exit(2)
 
+def check_databases(host, port, warning, critical):
+    try:
+        con = pymongo.Connection(host, port, slave_okay=True)
+
+        try:
+            data = con.admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
+        except:
+            data = con.admin.command(pymongo.son.SON([('listDatabases', 1)]))
+
+        count = len(data['databases'])
+
+        if count >= critical:
+            print "CRITICAL - Number of DBs: %.0f" % count
+            sys.exit(2)
+        elif count >= warning:
+            print "WARNING - Number of DBs: %.0f" % count
+            sys.exit(1)
+        else:
+            print "OK - Number of DBs: %.0f" % count
+            sys.exit(0)
+
+    except pymongo.errors.ConnectionFailure:
+        print "CRITICAL - Connection to MongoDB failed!"
+        sys.exit(2)
+
+def check_collections(host, port, warning, critical):
+    try:
+        con = pymongo.Connection(host, port, slave_okay=True)
+
+        try:
+            data = con.admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
+        except:
+            data = con.admin.command(pymongo.son.SON([('listDatabases', 1)]))
+
+        count = 0
+        for db in data['databases']:
+            dbname = db['name']
+            count += len(con[dbname].collection_names())
+
+        if count >= critical:
+            print "CRITICAL - Number of collections: %.0f" % count
+            sys.exit(2)
+        elif count >= warning:
+            print "WARNING - Number of collections: %.0f" % count
+            sys.exit(1)
+        else:
+            print "OK - Number of collections: %.0f" % count
+            sys.exit(0)
+
+    except pymongo.errors.ConnectionFailure:
+        print "CRITICAL - Connection to MongoDB failed!"
+        sys.exit(2)
 
 #
 # main app
