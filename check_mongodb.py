@@ -13,6 +13,7 @@
 #   - Sam Perman <sam@brightcove.com>
 #   - @shlomoid on github
 #   - @jhoff909 on github
+#   - @jbraeuer on github
 #
 # USAGE
 #
@@ -49,6 +50,8 @@ def usage():
     print "        - last_flush_time: instantaneous flushing time in ms"
     print "        - replset_state: State of the node within a replset configuration"
     print "        - index_miss_ratio: Check the index miss ratio on queries"
+    print "        - databases: Overall number of databases"
+    print "        - collections: Number of collections"
     print "  -P : The port MongoDB is running on (defaults to 27017)"
     print "  -W : The warning threshold we want to set"
     print "  -C : The critical threshold we want to set"
@@ -107,6 +110,10 @@ def main(argv):
         check_flushing(host, port, warning, critical, False)
     elif action == "index_miss_ratio":
         index_miss_ratio(host, port, warning, critical)
+    elif action == "databases":
+        check_databases(host, port, warning, critical)
+    elif action == "collections":
+        check_collections(host, port, warning, critical)
     else:
         check_connect(host, port, warning, critical)
 
@@ -383,6 +390,58 @@ def check_replset_state(host, port):
         print "CRITICAL - Connection to MongoDB failed!"
         sys.exit(2)
 
+def check_databases(host, port, warning, critical):
+    try:
+        con = pymongo.Connection(host, port, slave_okay=True)
+
+        try:
+            data = con.admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
+        except:
+            data = con.admin.command(pymongo.son.SON([('listDatabases', 1)]))
+
+        count = len(data['databases'])
+
+        if count >= critical:
+            print "CRITICAL - Number of DBs: %.0f" % count
+            sys.exit(2)
+        elif count >= warning:
+            print "WARNING - Number of DBs: %.0f" % count
+            sys.exit(1)
+        else:
+            print "OK - Number of DBs: %.0f" % count
+            sys.exit(0)
+
+    except pymongo.errors.ConnectionFailure:
+        print "CRITICAL - Connection to MongoDB failed!"
+        sys.exit(2)
+
+def check_collections(host, port, warning, critical):
+    try:
+        con = pymongo.Connection(host, port, slave_okay=True)
+
+        try:
+            data = con.admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
+        except:
+            data = con.admin.command(pymongo.son.SON([('listDatabases', 1)]))
+
+        count = 0
+        for db in data['databases']:
+            dbname = db['name']
+            count += len(con[dbname].collection_names())
+
+        if count >= critical:
+            print "CRITICAL - Number of collections: %.0f" % count
+            sys.exit(2)
+        elif count >= warning:
+            print "WARNING - Number of collections: %.0f" % count
+            sys.exit(1)
+        else:
+            print "OK - Number of collections: %.0f" % count
+            sys.exit(0)
+
+    except pymongo.errors.ConnectionFailure:
+        print "CRITICAL - Connection to MongoDB failed!"
+        sys.exit(2)
 
 #
 # main app
