@@ -45,7 +45,7 @@ define service {
     hostgroup_name          Mongo Servers
     service_description     Mongo Connect Check
     check_command           check_mongodb!connect!27017!2!4
-}   
+}
 </code></pre>
 
 #### Check Percentage of Open Connections
@@ -58,7 +58,7 @@ define service {
     hostgroup_name          Mongo Servers
     service_description     Mongo Free Connections
     check_command           check_mongodb!connections!27017!70!80
-}   
+}
 </code></pre>
 
 #### Check Replication Lag
