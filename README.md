@@ -11,7 +11,7 @@ This is a simple Nagios check script to monitor your MongoDB server(s).
 ### Contributers
  - Frank Brandewiede <brande -(at)- travel-iq.com> <brande -(at)- bfiw.de> <brande -(at)- novolab.de>
  - Sam Perman <sam -(at)- brightcove.com>
- - @shlomoid on github
+ - Shlomo Priymak <shlomoid -(at)- gmail.com>
  - @jhoff909 on github
 
 ## Installation
