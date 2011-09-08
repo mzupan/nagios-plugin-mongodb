@@ -121,7 +121,7 @@ This is a test that will check the last flush time of Mongo server. In my exampl
 define service {
     use                 generic-service
     hostgroup_name          Mongo Servers
-    service_description     Mongo Flush Average
+    service_description     Mongo Last Flush Time
     check_command           check_mongodb!last_flush_time!27017!200!400
 }
 </code></pre>
