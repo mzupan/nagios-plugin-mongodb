@@ -50,6 +50,8 @@ def usage():
             - databases: Overall number of databases
             - collections: Number of collections
       -P : The port MongoDB is running on (defaults to 27017)
+      -u : The username you want to login as
+      -p : The password you want to use for that user
       -W : The warning threshold we want to set
       -C : The critical threshold we want to set
       -D : Enable output Nagios performance data (off by default)
@@ -66,6 +68,8 @@ def main(argv):
 
     p.add_option('-H', '--host', action='store', type='string', dest='host', default='127.0.0.1', help='            -H : The hostname you want to connect to')
     p.add_option('-P', '--port', action='store', type='string', dest='port', default='27017', help='            -P : The port mongodb is runnung on')
+    p.add_option('-u', '--user', action='store', type='string', dest='user', default=None, help='            -u : The username you want to login as')
+    p.add_option('-p', '--pass', action='store', type='string', dest='passwd', default=None, help='            -p : The password you want to use for that user')
     p.add_option('-W', '--warning', action='store', type='string', dest='warning', default=None, help='            -W : The warning threshold we want to set')
     p.add_option('-C', '--critical', action='store', type='string', dest='critical', default=None, help='            -C : The critical threshold we want to set')
     p.add_option('-A', '--action', action='store', type='string', dest='action', default='connect', help='            -A : The action you want to take')
@@ -74,6 +78,8 @@ def main(argv):
 
     host = options.host
     port_string = options.port
+    user = options.user
+    passwd = options.passwd
     warning_string = options.warning
     critical_string = options.critical
     action = options.action
@@ -93,44 +99,64 @@ def main(argv):
         critical = float(critical_string)
     except (ValueError, TypeError):
         critical = None
-
+        
+    #
+    # moving the login up here and passing in the connection
+    #
+    try:
+        con = pymongo.Connection(host, port, slave_okay=True)
+        
+        if user and passwd:
+            db = con["admin"]
+            db.authenticate(user, passwd)
+    except:
+        print "CRITICAL - Connection to MongoDB failed!"
+        sys.exit(2)
+    
     if action == "connections":
-        check_connections(host, port, warning, critical, perf_data)
+        check_connections(con, warning, critical, perf_data)
     elif action == "replication_lag":
-        check_rep_lag(host, port, warning, critical, perf_data)
+        check_rep_lag(con, warning, critical, perf_data)
     elif action == "replset_state":
-        check_replset_state(host, port)
+        check_replset_state(con)
     elif action == "memory":
-        check_memory(host, port, warning, critical, perf_data)
+        check_memory(con, warning, critical, perf_data)
     elif action == "lock":
-        check_lock(host, port, warning, critical, perf_data)
+        check_lock(con, warning, critical, perf_data)
     elif action == "flushing":
-        check_flushing(host, port, warning, critical, True, perf_data)
+        check_flushing(con, warning, critical, True, perf_data)
     elif action == "last_flush_time":
-        check_flushing(host, port, warning, critical, False, perf_data)
+        check_flushing(con, warning, critical, False, perf_data)
     elif action == "index_miss_ratio":
-        index_miss_ratio(host, port, warning, critical, perf_data)
+        index_miss_ratio(con, warning, critical, perf_data)
     elif action == "databases":
-        check_databases(host, port, warning, critical)
+        check_databases(con, warning, critical)
     elif action == "collections":
-        check_collections(host, port, warning, critical)
+        check_collections(con, warning, critical)
     else:
-        check_connect(host, port, warning, critical, perf_data)
-
-
-def exit_with_connection_critical():
-    print "CRITICAL - Connection to MongoDB failed!"
+        check_connect(host, port, warning, critical, perf_data, user, passwd)
+        
+def exit_with_general_critical(e):
+    print "CRITICAL - General MongoDB Error:", e
     sys.exit(2)
 
-
-def check_connect(host, port, warning, critical, perf_data):
+def check_connect(host, port, warning, critical, perf_data, user, passwd):
     warning = warning or 3
     critical = critical or 6
     if not warning: warning = 5
     try:
         start = time.time()
-        con = pymongo.Connection(host, port, slave_okay=True, network_timeout=critical)
 
+        try:
+            con = pymongo.Connection(host, port, slave_okay=True)
+            
+            if user and passwd:
+                db = con["admin"]
+                db.authenticate(user, passwd)
+        except:
+            print "CRITICAL - Connection to MongoDB failed!"
+            sys.exit(2)
+    
         conn_time = time.time() - start
         conn_time = round(conn_time, 0)
 
@@ -147,15 +173,14 @@ def check_connect(host, port, warning, critical, perf_data):
 
         print "OK - " + message
         sys.exit(0)
-    except pymongo.errors.ConnectionFailure:
-        exit_with_connection_critical()
+    except Exception, e:
+        exit_with_general_critical(e)
 
 
-def check_connections(host, port, warning, critical, perf_data):
+def check_connections(con, warning, critical, perf_data):
     warning = warning or 80
     critical = critical or 95
     try:
-        con = pymongo.Connection(host, port, slave_okay=True)
         try:
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1), ('repl', 1)]))
         except:
@@ -180,16 +205,14 @@ def check_connections(host, port, warning, critical, perf_data):
             print "OK - " + message
             sys.exit(0)
 
-    except pymongo.errors.ConnectionFailure:
-        exit_with_connection_critical()
+    except Exception, e:
+        exit_with_general_critical(e)
 
 
-def check_rep_lag(host, port, warning, critical, perf_data):
+def check_rep_lag(con, warning, critical, perf_data):
     warning = warning or 600
     critical = critical or 3600
     try:
-        con = pymongo.Connection(host, port, slave_okay=True)
-
         isMasterStatus = con.admin.command("ismaster", "1")
         if not isMasterStatus['ismaster']:
             print "OK - This is a slave."
@@ -245,19 +268,17 @@ def check_rep_lag(host, port, warning, critical, perf_data):
             print "OK - " + message
             sys.exit(0)
 
-    except pymongo.errors.ConnectionFailure:
-        exit_with_connection_critical()
+    except Exception, e:
+        exit_with_general_critical(e)
 
 
-def check_memory(host, port, warning, critical, perf_data):
+def check_memory(con, warning, critical, perf_data):
     #
     # These thresholds are basically meaningless, and must be customized to your system's ram
     #
     warning = warning or 8
     critical = critical or 16
     try:
-        con = pymongo.Connection(host, port, slave_okay=True)
-
         try:
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
         except:
@@ -288,16 +309,14 @@ def check_memory(host, port, warning, critical, perf_data):
             print "OK - " + message
             sys.exit(0)
 
-    except pymongo.errors.ConnectionFailure:
-        exit_with_connection_critical()
+    except Exception, e:
+        exit_with_general_critical(e)
 
 
-def check_lock(host, port, warning, critical, perf_data):
+def check_lock(con, warning, critical, perf_data):
     warning = warning or 10
     critical = critical or 30
     try:
-        con = pymongo.Connection(host, port, slave_okay=True)
-
         try:
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
         except:
@@ -322,11 +341,11 @@ def check_lock(host, port, warning, critical, perf_data):
             sys.exit(0)
 
 
-    except pymongo.errors.ConnectionFailure:
-        exit_with_connection_critical()
+    except Exception, e:
+        exit_with_general_critical(e)
 
 
-def check_flushing(host, port, warning, critical, avg, perf_data):
+def check_flushing(con, warning, critical, avg, perf_data):
     #
     # These thresholds mean it's taking 5 seconds to perform a background flush to issue a warning
     # and 10 seconds to issue a critical.
@@ -334,8 +353,6 @@ def check_flushing(host, port, warning, critical, avg, perf_data):
     warning = warning or 5000
     critical = critical or 15000
     try:
-        con = pymongo.Connection(host, port, slave_okay=True)
-
         try:
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
         except:
@@ -362,16 +379,14 @@ def check_flushing(host, port, warning, critical, avg, perf_data):
             print "OK - " + message
             sys.exit(0)
 
-    except pymongo.errors.ConnectionFailure:
-        exit_with_connection_critical()
+    except Exception, e:
+        exit_with_general_critical(e)
 
 
-def index_miss_ratio(host, port, warning, critical, perf_data):
+def index_miss_ratio(con, warning, critical, perf_data):
     warning = warning or 10
     critical = critical or 30
     try:
-        con = pymongo.Connection(host, port, slave_okay=True)
-
         try:
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
         except:
@@ -402,14 +417,12 @@ def index_miss_ratio(host, port, warning, critical, perf_data):
             print "OK - " + message
             sys.exit(0)
 
-    except pymongo.errors.ConnectionFailure:
-        exit_with_connection_critical()
+    except Exception, e:
+        exit_with_general_critical(e)
 
         
-def check_replset_state(host, port):
+def check_replset_state(con):
     try:
-        con = pymongo.Connection(host, port, slave_okay=True)
-
         try:
             data = con.admin.command(pymongo.son_manipulator.SON([('replSetGetStatus', 1)]))
         except:
@@ -445,13 +458,11 @@ def check_replset_state(host, port):
             print "CRITICAL - State: %i (Unknown state)" % state
             sys.exit(2)
 
-    except pymongo.errors.ConnectionFailure:
-        exit_with_connection_critical()
+    except Exception, e:
+        exit_with_general_critical(e)
 
-def check_databases(host, port, warning, critical):
+def check_databases(con, warning, critical):
     try:
-        con = pymongo.Connection(host, port, slave_okay=True)
-
         try:
             data = con.admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
         except:
@@ -469,13 +480,11 @@ def check_databases(host, port, warning, critical):
             print "OK - Number of DBs: %.0f" % count
             sys.exit(0)
 
-    except pymongo.errors.ConnectionFailure:
-        exit_with_connection_critical()
+    except Exception, e:
+        exit_with_general_critical(e)
 
-def check_collections(host, port, warning, critical):
+def check_collections(con, warning, critical):
     try:
-        con = pymongo.Connection(host, port, slave_okay=True)
-
         try:
             data = con.admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
         except:
@@ -496,8 +505,8 @@ def check_collections(host, port, warning, critical):
             print "OK - Number of collections: %.0f" % count
             sys.exit(0)
 
-    except pymongo.errors.ConnectionFailure:
-        exit_with_connection_critical()
+    except Exception, e:
+        exit_with_general_critical(e)
 
 #
 # main app
