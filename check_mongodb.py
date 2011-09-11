@@ -137,8 +137,11 @@ def main(argv):
         check_connect(host, port, warning, critical, perf_data, user, passwd)
         
 def exit_with_general_critical(e):
-    print "CRITICAL - General MongoDB Error:", e
-    sys.exit(2)
+    if isinstance(e, SystemExit):
+        sys.exit(e)
+    else:
+        print "CRITICAL - General MongoDB Error:", e
+        sys.exit(2)
 
 def check_connect(host, port, warning, critical, perf_data, user, passwd):
     warning = warning or 3
