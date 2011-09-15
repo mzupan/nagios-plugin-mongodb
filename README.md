@@ -53,14 +53,14 @@ define service {
 
 #### Check Replication Lag
 
-This is a test that will test the replication lag of Mongo servers. It will send out a warning if the lag is over 2 seconds and a critical error if its over 5 seconds
+This is a test that will test the replication lag of Mongo servers. It will send out a warning if the lag is over 15 seconds and a critical error if its over 30 seconds. Please note that this check uses 'optime' from rs.status() which will be behind realtime as heartbeat requests between servers only occur every few seconds. Thus this check may show an apparent lag of < 10 seconds when there really isn't any. Use larger values for reliable monitoring.
 
 <pre><code>
 define service {
     use                 generic-service
     hostgroup_name          Mongo Servers
     service_description     Mongo Replication Lag
-    check_command           check_mongodb!replication_lag!27017!2!5
+    check_command           check_mongodb!replication_lag!27017!15!30
 }
 </code></pre>
 
