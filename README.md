@@ -13,6 +13,7 @@ This is a simple Nagios check script to monitor your MongoDB server(s).
  - Sam Perman <sam -(at)- brightcove.com>
  - Shlomo Priymak <shlomoid -(at)- gmail.com>
  - @jhoff909 on github
+ - Dag Stockstad <dag.stockstad -(at)- gmail.com>
 
 ## Installation
 
@@ -30,6 +31,11 @@ Edit your commands.cfg and add the following
 define command {
     command_name    check_mongodb
     command_line    $USER1$/nagios-plugin-mongodb/check_mongodb.py -H $HOSTADDRESS$ -A $ARG1$ -P $ARG2$ -W $ARG3$ -C $ARG4$
+}
+
+define command {
+    command_name    check_mongodb_database
+    command_line    $USER1$/nagios-plugin-mongodb/check_mongodb.py -H $HOSTADDRESS$ -A $ARG1$ -P $ARG2$ -W $ARG3$ -C $ARG4$ -d $ARG5$
 }
 </code></pre>
 
@@ -166,5 +172,19 @@ define service {
       hostgroup_name          Mongo Servers
       service_description     MongoDB Number of collections
       check_command           check_mongodb!collections!27017!300!500
+}
+</code></pre>
+
+
+
+#### Check size of a database
+This will check the size of a database. This is useful for keeping track of growth of a particular database.
+Replace your-database with the name of your database
+<pre><code>
+define service {
+      use                     generic-service
+      hostgroup_name          Mongo Servers
+      service_description     MongoDB Database size your-database
+      check_command           check_mongodb_database!collections!27017!300!500!your-database
 }
 </code></pre>

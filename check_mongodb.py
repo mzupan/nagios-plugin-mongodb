@@ -14,6 +14,7 @@
 #   - Shlomo Priymak <shlomoid@gmail.com>
 #   - @jhoff909 on github
 #   - @jbraeuer on github
+#   - Dag Stockstad <dag.stockstad@gmail.com>
 #
 # USAGE
 #
@@ -49,12 +50,14 @@ def usage():
             - index_miss_ratio: Check the index miss ratio on queries
             - databases: Overall number of databases
             - collections: Number of collections
+            - database_size: Database size
       -P : The port MongoDB is running on (defaults to 27017)
       -u : The username you want to login as
       -p : The password you want to use for that user
       -W : The warning threshold we want to set
       -C : The critical threshold we want to set
       -D : Enable output Nagios performance data (off by default)
+      -d : Specify the database to check
     """
     print textwrap.dedent(usage_text)
 
@@ -74,6 +77,7 @@ def main(argv):
     p.add_option('-C', '--critical', action='store', type='string', dest='critical', default=None, help='            -C : The critical threshold we want to set')
     p.add_option('-A', '--action', action='store', type='string', dest='action', default='connect', help='            -A : The action you want to take')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='            -D : Enable output of Nagios performance data')
+    p.add_option('-d', '--database', action='store', dest='database', default=None, help='            -d : Specify the database to check')
     options, arguments = p.parse_args()
 
     host = options.host
@@ -84,6 +88,7 @@ def main(argv):
     critical_string = options.critical
     action = options.action
     perf_data = options.perf_data
+    database = options.database
 
     try:
         port = int(port_string)
@@ -133,6 +138,8 @@ def main(argv):
         check_databases(con, warning, critical)
     elif action == "collections":
         check_collections(con, warning, critical)
+    elif action == "database_size":
+        check_database_size(con, database, warning, critical, perf_data)
     else:
         check_connect(host, port, warning, critical, perf_data, user, passwd)
         
@@ -510,6 +517,33 @@ def check_collections(con, warning, critical):
 
     except Exception, e:
         exit_with_general_critical(e)
+
+
+def check_database_size(con, database, warning, critical, perf_data):
+    database = database or "admin"
+    warning = warning or 100
+    critical = critical or 1000
+    perfdata = ""
+
+    try:
+        data = con[database].command('dbstats')
+        storage_size = data['storageSize'] / 1024 / 1024
+        if perf_data:
+            perfdata += " | database_size=%i;%i;%i" % (storage_size, warning, critical)
+            perfdata += " database=%s" %(database)
+
+        if storage_size >= critical:
+            print "CRITICAL - Database size: %.0f MB, Database: %s%s" % (storage_size, database, perfdata)
+            sys.exit(2)
+        elif storage_size >= warning:
+            print "WARNING - Database size: %.0f MB, Database: %s%s" % (storage_size, database, perfdata)
+            sys.exit(1)
+        else:
+            print "OK - Database size: %.0f MB, Database: %s%s" % (storage_size, database, perfdata)
+            sys.exit(0)
+    except Exception, e:
+        exit_with_general_critical(e)
+
 
 #
 # main app
