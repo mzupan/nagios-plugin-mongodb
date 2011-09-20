@@ -29,8 +29,8 @@ import textwrap
 
 try:
     import pymongo
-except:
-    print "Need to install pymongo"
+except ImportError, e:
+    print e
     sys.exit(2)
 
 def usage():
