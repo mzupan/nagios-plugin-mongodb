@@ -15,6 +15,7 @@
 #   - @jhoff909 on github
 #   - @jbraeuer on github
 #   - Dag Stockstad <dag.stockstad@gmail.com>
+#   - @Andor on github
 #
 # USAGE
 #
@@ -100,8 +101,8 @@ def main(argv):
         if user and passwd:
             db = con["admin"]
             db.authenticate(user, passwd)
-    except Exception, instance:
-        print instance
+    except Exception, e:
+        print e
         sys.exit(2)
     conn_time = time.time() - start
     conn_time = round(conn_time, 0)
