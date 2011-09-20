@@ -77,7 +77,7 @@ def main(argv):
     p.add_option('-C', '--critical', action='store', type='float', dest='critical', default=None, help='            -C : The critical threshold we want to set')
     p.add_option('-A', '--action', action='store', type='string', dest='action', default='connect', help='            -A : The action you want to take')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='            -D : Enable output of Nagios performance data')
-    p.add_option('-d', '--database', action='store', dest='database', default=None, help='            -d : Specify the database to check')
+    p.add_option('-d', '--database', action='store', dest='database', default='admin', help='            -d : Specify the database to check')
     options, arguments = p.parse_args()
 
     host = options.host
@@ -504,11 +504,9 @@ def check_collections(con, warning, critical):
 
 
 def check_database_size(con, database, warning, critical, perf_data):
-    database = database or "admin"
     warning = warning or 100
     critical = critical or 1000
     perfdata = ""
-
     try:
         data = con[database].command('dbstats')
         storage_size = data['storageSize'] / 1024 / 1024
