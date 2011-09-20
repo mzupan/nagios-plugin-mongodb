@@ -99,8 +99,8 @@ def main(argv):
         if user and passwd:
             db = con["admin"]
             db.authenticate(user, passwd)
-    except:
-        print "CRITICAL - Connection to MongoDB failed!"
+    except Exception, instance:
+        print instance
         sys.exit(2)
     
     if action == "connections":
