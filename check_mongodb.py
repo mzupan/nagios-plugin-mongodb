@@ -15,6 +15,7 @@
 #   - @jhoff909 on github
 #   - @jbraeuer on github
 #   - Dag Stockstad <dag.stockstad@gmail.com>
+#   - @Andor on github
 #
 # USAGE
 #
@@ -28,96 +29,50 @@ import textwrap
 
 try:
     import pymongo
-except:
-    print "Need to install pymongo"
+except ImportError, e:
+    print e
     sys.exit(2)
 
-def usage():
-    print "\n %s -H host -A action -P port -W warning -C critical" % sys.argv[0]
-    usage_text = """
-    Below are the following flags you can use
-
-      -H : The hostname you want to connect to
-      -A : The action you want to take
-            - replication_lag : checks the replication lag
-            - connections : checks the percentage of free connections
-            - connect: can we connect to the mongodb server
-            - memory: checks the resident memory used by mongodb in gigabytes
-            - lock: checks percentage of lock time for the server
-            - flushing: checks the average flush time the server
-            - last_flush_time: instantaneous flushing time in ms
-            - replset_state: State of the node within a replset configuration
-            - index_miss_ratio: Check the index miss ratio on queries
-            - databases: Overall number of databases
-            - collections: Number of collections
-            - database_size: Database size
-      -P : The port MongoDB is running on (defaults to 27017)
-      -u : The username you want to login as
-      -p : The password you want to use for that user
-      -W : The warning threshold we want to set
-      -C : The critical threshold we want to set
-      -D : Enable output Nagios performance data (off by default)
-      -d : Specify the database to check
-    """
-    print textwrap.dedent(usage_text)
-
 def main(argv):
-
-    if not len(argv):
-        usage()
-        sys.exit(2)
-
     p = optparse.OptionParser(conflict_handler="resolve", description= "This Nagios plugin checks the health of mongodb.")
 
-    p.add_option('-H', '--host', action='store', type='string', dest='host', default='127.0.0.1', help='            -H : The hostname you want to connect to')
-    p.add_option('-P', '--port', action='store', type='string', dest='port', default='27017', help='            -P : The port mongodb is runnung on')
-    p.add_option('-u', '--user', action='store', type='string', dest='user', default=None, help='            -u : The username you want to login as')
-    p.add_option('-p', '--pass', action='store', type='string', dest='passwd', default=None, help='            -p : The password you want to use for that user')
-    p.add_option('-W', '--warning', action='store', type='string', dest='warning', default=None, help='            -W : The warning threshold we want to set')
-    p.add_option('-C', '--critical', action='store', type='string', dest='critical', default=None, help='            -C : The critical threshold we want to set')
-    p.add_option('-A', '--action', action='store', type='string', dest='action', default='connect', help='            -A : The action you want to take')
-    p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='            -D : Enable output of Nagios performance data')
-    p.add_option('-d', '--database', action='store', dest='database', default=None, help='            -d : Specify the database to check')
+    p.add_option('-H', '--host', action='store', type='string', dest='host', default='127.0.0.1', help='The hostname you want to connect to')
+    p.add_option('-P', '--port', action='store', type='int', dest='port', default=27017, help='The port mongodb is runnung on')
+    p.add_option('-u', '--user', action='store', type='string', dest='user', default=None, help='The username you want to login as')
+    p.add_option('-p', '--pass', action='store', type='string', dest='passwd', default=None, help='The password you want to use for that user')
+    p.add_option('-W', '--warning', action='store', type='float', dest='warning', default=None, help='The warning threshold we want to set')
+    p.add_option('-C', '--critical', action='store', type='float', dest='critical', default=None, help='The critical threshold we want to set')
+    p.add_option('-A', '--action', action='store', type='string', dest='action', default='connect', help='The action you want to take')
+    p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
+    p.add_option('-d', '--database', action='store', dest='database', default='admin', help='Specify the database to check')
     options, arguments = p.parse_args()
 
     host = options.host
-    port_string = options.port
+    port = options.port
     user = options.user
     passwd = options.passwd
-    warning_string = options.warning
-    critical_string = options.critical
+    warning = options.warning
+    critical = options.critical
     action = options.action
     perf_data = options.perf_data
     database = options.database
 
-    try:
-        port = int(port_string)
-    except ValueError:
-        port = 27017
-
-    try:
-        warning = float(warning_string)
-    except (ValueError, TypeError):
-        warning = None
-
-    try:
-        critical = float(critical_string)
-    except (ValueError, TypeError):
-        critical = None
-        
     #
     # moving the login up here and passing in the connection
     #
+    start = time.time()
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
-        
+
         if user and passwd:
             db = con["admin"]
             db.authenticate(user, passwd)
-    except:
-        print "CRITICAL - Connection to MongoDB failed!"
+    except Exception, e:
+        print e
         sys.exit(2)
-    
+    conn_time = time.time() - start
+    conn_time = round(conn_time, 0)
+
     if action == "connections":
         check_connections(con, warning, critical, perf_data)
     elif action == "replication_lag":
@@ -141,8 +96,8 @@ def main(argv):
     elif action == "database_size":
         check_database_size(con, database, warning, critical, perf_data)
     else:
-        check_connect(host, port, warning, critical, perf_data, user, passwd)
-        
+        check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
+
 def exit_with_general_critical(e):
     if isinstance(e, SystemExit):
         sys.exit(e)
@@ -150,41 +105,22 @@ def exit_with_general_critical(e):
         print "CRITICAL - General MongoDB Error:", e
         sys.exit(2)
 
-def check_connect(host, port, warning, critical, perf_data, user, passwd):
+def check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time):
     warning = warning or 3
     critical = critical or 6
-    if not warning: warning = 5
-    try:
-        start = time.time()
+    message = "Connection took %i seconds" % conn_time
+    if perf_data:
+        message += " | connection_time=%is;%i;%i" % (conn_time, warning, critical)
 
-        try:
-            con = pymongo.Connection(host, port, slave_okay=True)
-            
-            if user and passwd:
-                db = con["admin"]
-                db.authenticate(user, passwd)
-        except:
-            print "CRITICAL - Connection to MongoDB failed!"
-            sys.exit(2)
-    
-        conn_time = time.time() - start
-        conn_time = round(conn_time, 0)
+    if conn_time >= critical:
+        print "CRITICAL - " + message
+        sys.exit(2)
+    elif conn_time >= warning:
+        print "WARNING - " + message
+        sys.exit(1)
 
-        message = "Connection took %i seconds" % int(conn_time)
-        if perf_data:
-            message += " | connection_time=%is;%i;%i" % (conn_time, warning, critical)
-
-        if conn_time >= critical:
-            print "CRITICAL - " + message
-            sys.exit(2)
-        elif conn_time >= warning:
-            print "WARNING - " + message
-            sys.exit(1)
-
-        print "OK - " + message
-        sys.exit(0)
-    except Exception, e:
-        exit_with_general_critical(e)
+    print "OK - " + message
+    sys.exit(0)
 
 
 def check_connections(con, warning, critical, perf_data):
@@ -339,7 +275,7 @@ def check_lock(con, warning, critical, perf_data):
         message = "Lock Percentage: %.2f%%" % lock_percentage
         if perf_data:
             message += " | lock_percentage=%.2f%%;%i;%i" % (lock_percentage, warning, critical)
-            
+
         if lock_percentage >= critical:
             print "CRITICAL - " + message
             sys.exit(2)
@@ -416,7 +352,7 @@ def index_miss_ratio(con, warning, critical, perf_data):
         message = "Miss Ratio: %.2f" % miss_ratio
         if perf_data:
             message += " | index_miss_ratio=%.2f;%i;%i" % (miss_ratio, warning, critical)
-            
+
         if miss_ratio >= critical:
             print "CRITICAL - " + message
             sys.exit(2)
@@ -430,7 +366,7 @@ def index_miss_ratio(con, warning, critical, perf_data):
     except Exception, e:
         exit_with_general_critical(e)
 
-        
+
 def check_replset_state(con):
     try:
         try:
@@ -520,11 +456,9 @@ def check_collections(con, warning, critical):
 
 
 def check_database_size(con, database, warning, critical, perf_data):
-    database = database or "admin"
     warning = warning or 100
     critical = critical or 1000
     perfdata = ""
-
     try:
         data = con[database].command('dbstats')
         storage_size = data['storageSize'] / 1024 / 1024
