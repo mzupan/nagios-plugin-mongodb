@@ -95,14 +95,14 @@ def main(argv):
     #
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
-        
+
         if user and passwd:
             db = con["admin"]
             db.authenticate(user, passwd)
     except Exception, instance:
         print instance
         sys.exit(2)
-    
+
     if action == "connections":
         check_connections(con, warning, critical, perf_data)
     elif action == "replication_lag":
@@ -127,7 +127,7 @@ def main(argv):
         check_database_size(con, database, warning, critical, perf_data)
     else:
         check_connect(host, port, warning, critical, perf_data, user, passwd)
-        
+
 def exit_with_general_critical(e):
     if isinstance(e, SystemExit):
         sys.exit(e)
@@ -143,14 +143,14 @@ def check_connect(host, port, warning, critical, perf_data, user, passwd):
 
         try:
             con = pymongo.Connection(host, port, slave_okay=True)
-            
+
             if user and passwd:
                 db = con["admin"]
                 db.authenticate(user, passwd)
         except:
             print "CRITICAL - Connection to MongoDB failed!"
             sys.exit(2)
-    
+
         conn_time = time.time() - start
         conn_time = round(conn_time, 0)
 
@@ -323,7 +323,7 @@ def check_lock(con, warning, critical, perf_data):
         message = "Lock Percentage: %.2f%%" % lock_percentage
         if perf_data:
             message += " | lock_percentage=%.2f%%;%i;%i" % (lock_percentage, warning, critical)
-            
+
         if lock_percentage >= critical:
             print "CRITICAL - " + message
             sys.exit(2)
@@ -400,7 +400,7 @@ def index_miss_ratio(con, warning, critical, perf_data):
         message = "Miss Ratio: %.2f" % miss_ratio
         if perf_data:
             message += " | index_miss_ratio=%.2f;%i;%i" % (miss_ratio, warning, critical)
-            
+
         if miss_ratio >= critical:
             print "CRITICAL - " + message
             sys.exit(2)
@@ -414,7 +414,7 @@ def index_miss_ratio(con, warning, critical, perf_data):
     except Exception, e:
         exit_with_general_critical(e)
 
-        
+
 def check_replset_state(con):
     try:
         try:
