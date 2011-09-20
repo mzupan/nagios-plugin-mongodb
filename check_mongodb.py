@@ -70,11 +70,11 @@ def main(argv):
     p = optparse.OptionParser(conflict_handler="resolve", description= "This Nagios plugin checks the health of mongodb.")
 
     p.add_option('-H', '--host', action='store', type='string', dest='host', default='127.0.0.1', help='            -H : The hostname you want to connect to')
-    p.add_option('-P', '--port', action='store', type='string', dest='port', default='27017', help='            -P : The port mongodb is runnung on')
+    p.add_option('-P', '--port', action='store', type='int', dest='port', default=27017, help='            -P : The port mongodb is runnung on')
     p.add_option('-u', '--user', action='store', type='string', dest='user', default=None, help='            -u : The username you want to login as')
     p.add_option('-p', '--pass', action='store', type='string', dest='passwd', default=None, help='            -p : The password you want to use for that user')
-    p.add_option('-W', '--warning', action='store', type='string', dest='warning', default=None, help='            -W : The warning threshold we want to set')
-    p.add_option('-C', '--critical', action='store', type='string', dest='critical', default=None, help='            -C : The critical threshold we want to set')
+    p.add_option('-W', '--warning', action='store', type='float', dest='warning', default=None, help='            -W : The warning threshold we want to set')
+    p.add_option('-C', '--critical', action='store', type='float', dest='critical', default=None, help='            -C : The critical threshold we want to set')
     p.add_option('-A', '--action', action='store', type='string', dest='action', default='connect', help='            -A : The action you want to take')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='            -D : Enable output of Nagios performance data')
     p.add_option('-d', '--database', action='store', dest='database', default=None, help='            -d : Specify the database to check')
@@ -90,21 +90,6 @@ def main(argv):
     perf_data = options.perf_data
     database = options.database
 
-    try:
-        port = int(port_string)
-    except ValueError:
-        port = 27017
-
-    try:
-        warning = float(warning_string)
-    except (ValueError, TypeError):
-        warning = None
-
-    try:
-        critical = float(critical_string)
-    except (ValueError, TypeError):
-        critical = None
-        
     #
     # moving the login up here and passing in the connection
     #
