@@ -93,6 +93,7 @@ def main(argv):
     #
     # moving the login up here and passing in the connection
     #
+    start = time.time()
     try:
         con = pymongo.Connection(host, port, slave_okay=True)
 
@@ -102,6 +103,8 @@ def main(argv):
     except Exception, instance:
         print instance
         sys.exit(2)
+    conn_time = time.time() - start
+    conn_time = round(conn_time, 0)
 
     if action == "connections":
         check_connections(con, warning, critical, perf_data)
@@ -126,7 +129,7 @@ def main(argv):
     elif action == "database_size":
         check_database_size(con, database, warning, critical, perf_data)
     else:
-        check_connect(host, port, warning, critical, perf_data, user, passwd)
+        check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
 def exit_with_general_critical(e):
     if isinstance(e, SystemExit):
@@ -135,40 +138,22 @@ def exit_with_general_critical(e):
         print "CRITICAL - General MongoDB Error:", e
         sys.exit(2)
 
-def check_connect(host, port, warning, critical, perf_data, user, passwd):
+def check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time):
     warning = warning or 3
     critical = critical or 6
-    try:
-        start = time.time()
+    message = "Connection took %i seconds" % conn_time
+    if perf_data:
+        message += " | connection_time=%is;%i;%i" % (conn_time, warning, critical)
 
-        try:
-            con = pymongo.Connection(host, port, slave_okay=True)
+    if conn_time >= critical:
+        print "CRITICAL - " + message
+        sys.exit(2)
+    elif conn_time >= warning:
+        print "WARNING - " + message
+        sys.exit(1)
 
-            if user and passwd:
-                db = con["admin"]
-                db.authenticate(user, passwd)
-        except:
-            print "CRITICAL - Connection to MongoDB failed!"
-            sys.exit(2)
-
-        conn_time = time.time() - start
-        conn_time = round(conn_time, 0)
-
-        message = "Connection took %i seconds" % int(conn_time)
-        if perf_data:
-            message += " | connection_time=%is;%i;%i" % (conn_time, warning, critical)
-
-        if conn_time >= critical:
-            print "CRITICAL - " + message
-            sys.exit(2)
-        elif conn_time >= warning:
-            print "WARNING - " + message
-            sys.exit(1)
-
-        print "OK - " + message
-        sys.exit(0)
-    except Exception, e:
-        exit_with_general_critical(e)
+    print "OK - " + message
+    sys.exit(0)
 
 
 def check_connections(con, warning, critical, perf_data):
