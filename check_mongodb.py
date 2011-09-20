@@ -33,41 +33,7 @@ except ImportError, e:
     print e
     sys.exit(2)
 
-def usage():
-    print "\n %s -H host -A action -P port -W warning -C critical" % sys.argv[0]
-    usage_text = """
-    Below are the following flags you can use
-
-      -H : The hostname you want to connect to
-      -A : The action you want to take
-            - replication_lag : checks the replication lag
-            - connections : checks the percentage of free connections
-            - connect: can we connect to the mongodb server
-            - memory: checks the resident memory used by mongodb in gigabytes
-            - lock: checks percentage of lock time for the server
-            - flushing: checks the average flush time the server
-            - last_flush_time: instantaneous flushing time in ms
-            - replset_state: State of the node within a replset configuration
-            - index_miss_ratio: Check the index miss ratio on queries
-            - databases: Overall number of databases
-            - collections: Number of collections
-            - database_size: Database size
-      -P : The port MongoDB is running on (defaults to 27017)
-      -u : The username you want to login as
-      -p : The password you want to use for that user
-      -W : The warning threshold we want to set
-      -C : The critical threshold we want to set
-      -D : Enable output Nagios performance data (off by default)
-      -d : Specify the database to check
-    """
-    print textwrap.dedent(usage_text)
-
 def main(argv):
-
-    if not len(argv):
-        usage()
-        sys.exit(2)
-
     p = optparse.OptionParser(conflict_handler="resolve", description= "This Nagios plugin checks the health of mongodb.")
 
     p.add_option('-H', '--host', action='store', type='string', dest='host', default='127.0.0.1', help='The hostname you want to connect to')
