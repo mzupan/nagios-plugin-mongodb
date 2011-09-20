@@ -81,11 +81,11 @@ def main(argv):
     options, arguments = p.parse_args()
 
     host = options.host
-    port_string = options.port
+    port = options.port
     user = options.user
     passwd = options.passwd
-    warning_string = options.warning
-    critical_string = options.critical
+    warning = options.warning
+    critical = options.critical
     action = options.action
     perf_data = options.perf_data
     database = options.database
