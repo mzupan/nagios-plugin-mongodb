@@ -138,7 +138,6 @@ def exit_with_general_critical(e):
 def check_connect(host, port, warning, critical, perf_data, user, passwd):
     warning = warning or 3
     critical = critical or 6
-    if not warning: warning = 5
     try:
         start = time.time()
 
