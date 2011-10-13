@@ -197,6 +197,10 @@ def check_rep_lag(con, warning, critical, perf_data):
             if member['stateStr'] == 'SECONDARY':
                 lastSlaveOpTime = member['optime'].time
                 replicationLag = lastMasterOpTime - lastSlaveOpTime - slaveDelays[member['name']]
+                
+                if replicationLag is None:
+                    replicationLag = 0
+                    
                 data = data + member['name'] + " lag=%s;" % replicationLag
                 lag = max(lag, replicationLag)
 
