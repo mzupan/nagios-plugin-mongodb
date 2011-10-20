@@ -204,7 +204,7 @@ def check_rep_lag(con, warning, critical, perf_data):
                 data = data + member['name'] + " lag=%s;" % replicationLag
                 lag = max(lag, replicationLag)
 
-        data = data[0:len(data)-2]
+        data = data[0:len(data)-1]
         message = "Max replication lag: %i [%s]" % (lag, data)
         if perf_data:
             message += " | max_replication_lag=%is" % lag
