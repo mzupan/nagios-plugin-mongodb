@@ -185,6 +185,6 @@ define service {
       use                     generic-service
       hostgroup_name          Mongo Servers
       service_description     MongoDB Database size your-database
-      check_command           check_mongodb_database!collections!27017!300!500!your-database
+      check_command           check_mongodb_database!database_size!27017!300!500!your-database
 }
 </code></pre>
