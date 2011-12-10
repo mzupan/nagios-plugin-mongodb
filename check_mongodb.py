@@ -68,6 +68,11 @@ def main(argv):
             db = con["admin"]
             db.authenticate(user, passwd)
     except Exception, e:
+        if isinstance(e,pymongo.errors.AutoReconnect) and str(e).find("arbiter") != -1:
+            # We got a pymongo AutoReconnect exception that tells us we connected to an Arbiter Server
+            # This means: Arbiter is reachable and can answer requests/votes - this is all we need to know from an arbiter
+            print "OK - State: 7 (Arbiter)"
+            sys.exit(0)
         print e
         sys.exit(2)
     conn_time = time.time() - start
@@ -400,9 +405,6 @@ def check_replset_state(con):
             sys.exit(0)
         elif state == 2:
             print "OK - State: %i (Secondary)" % state
-            sys.exit(0)
-        elif state == 7:
-            print "OK - State: %i (Arbiter)" % state
             sys.exit(0)
         else:
             print "CRITICAL - State: %i (Unknown state)" % state
