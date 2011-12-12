@@ -33,6 +33,19 @@ except ImportError, e:
     print e
     sys.exit(2)
 
+#
+# thanks to http://stackoverflow.com/a/1229667/72987
+#
+def optional_arg(arg_default):
+    def func(option,opt_str,value,parser):
+        if parser.rargs and not parser.rargs[0].startswith('-'):
+            val=parser.rargs[0]
+            parser.rargs.pop(0)
+        else:
+            val=arg_default
+        setattr(parser.values,option.dest,val)
+    return func
+
 def main(argv):
     p = optparse.OptionParser(conflict_handler="resolve", description= "This Nagios plugin checks the health of mongodb.")
 
@@ -45,6 +58,7 @@ def main(argv):
     p.add_option('-A', '--action', action='store', type='string', dest='action', default='connect', help='The action you want to take')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
     p.add_option('-d', '--database', action='store', dest='database', default='admin', help='Specify the database to check')
+    p.add_option('-s', '--ssl', dest='ssl', default=False, action='callback', callback=optional_arg(True), help='Connect using SSL')
     options, arguments = p.parse_args()
 
     host = options.host
@@ -56,13 +70,20 @@ def main(argv):
     action = options.action
     perf_data = options.perf_data
     database = options.database
+    ssl = options.ssl
 
     #
     # moving the login up here and passing in the connection
     #
     start = time.time()
     try:
-        con = pymongo.Connection(host, port, slave_okay=True)
+        #
+        # ssl connection for pymongo > 2.1
+        # 
+        if float(pymongo.version) >= 2.1:
+            con = pymongo.Connection(host, port, slave_okay=True, ssl=ssl)
+        else:
+            con = pymongo.Connection(host, port, slave_okay=True)
 
         if user and passwd:
             db = con["admin"]
