@@ -135,12 +135,14 @@ define service {
 #### Check status of mongodb replicaset
 This is a test that will check the status of nodes within a replicaset. Depending which status it is it sends a waring during status 0, 3 and 5, critical if the status is 4, 6 or 8 and a ok with status 1, 2 and 7.
 
+Note the trailing 2 0's keep those 0's as the check doesn't compare to anything.. So those values need to be there for the check to work.
+
 <pre><code>
 define service {
       use                     generic-service
       hostgroup_name          Mongo Servers
       service_description     MongoDB state
-      check_command           check_mongodb!replset_state!27017
+      check_command           check_mongodb!replset_state!27017!0!0
 }
 </code></pre>
 
