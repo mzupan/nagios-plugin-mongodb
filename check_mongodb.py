@@ -234,7 +234,7 @@ def check_rep_lag(con, warning, critical, perf_data):
         data = data[0:len(data)-1]
         message = "Max replication lag: %i [%s]" % (lag, data)
         if perf_data:
-            message += " | max_replication_lag=%(lag)is | replication_lag=%(lag)is" % {"lag" : lag}
+            message += " | max_replication_lag=%is | replication_lag=%is" % (lag, lag)
         if lag >= critical:
             print "CRITICAL - " + message
             sys.exit(2)
@@ -306,6 +306,7 @@ def check_lock(con, warning, critical, perf_data):
         message = "Lock Percentage: %.2f%%" % lock_percentage
         if perf_data:
             message += " | lock_percentage=%.2f%%;%i;%i" % (lock_percentage, warning, critical)
+        message += " | lock_percentage=%.2f%%" lock_percentage
 
         if lock_percentage >= critical:
             print "CRITICAL - " + message
