@@ -234,7 +234,7 @@ def check_rep_lag(con, warning, critical, perf_data):
         data = data[0:len(data)-1]
         message = "Max replication lag: %i [%s]" % (lag, data)
         if perf_data:
-            message += " | max_replication_lag=%is" % lag
+            message += " | max_replication_lag=%(lag)is | replication_lag=%(lag)is" % {"lag" : lag}
         if lag >= critical:
             print "CRITICAL - " + message
             sys.exit(2)
