@@ -80,7 +80,7 @@ def main(argv):
         #
         # ssl connection for pymongo > 2.1
         # 
-        if float(pymongo.version) >= 2.1:
+        if pymongo.version >= "2.1":
             con = pymongo.Connection(host, port, slave_okay=True, ssl=ssl)
         else:
             con = pymongo.Connection(host, port, slave_okay=True)
@@ -234,7 +234,8 @@ def check_rep_lag(con, warning, critical, perf_data):
         data = data[0:len(data)-1]
         message = "Max replication lag: %i [%s]" % (lag, data)
         if perf_data:
-            message += " | max_replication_lag=%is" % lag
+            message += " | max_replication_lag=%is " % lag
+        message += "| replication_lag=%i" % lag
         if lag >= critical:
             print "CRITICAL - " + message
             sys.exit(2)
@@ -306,6 +307,7 @@ def check_lock(con, warning, critical, perf_data):
         message = "Lock Percentage: %.2f%%" % lock_percentage
         if perf_data:
             message += " | lock_percentage=%.2f%%;%i;%i" % (lock_percentage, warning, critical)
+        message += " | lock_percentage=%.2f" % lock_percentage
 
         if lock_percentage >= critical:
             print "CRITICAL - " + message
@@ -515,3 +517,4 @@ def check_database_size(con, database, warning, critical, perf_data):
 #
 if __name__ == "__main__":
     main(sys.argv[1:])
+
