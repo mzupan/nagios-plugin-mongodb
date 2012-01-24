@@ -202,6 +202,9 @@ def check_rep_lag(con, warning, critical, perf_data):
             rs_conf = con.local.system.replset.find_one()
 
             for member in rs_conf['members']:
+                # mongod 2.0.2 does not include the port if it is running on the default port
+                if member['host'].find(':') == -1:
+                    member['host'] = member['host'] + ":27017" 
                 if member.get('slaveDelay') is not None:
                     slaveDelays[member['host']] = member.get('slaveDelay')
                 else:
