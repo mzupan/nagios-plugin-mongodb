@@ -81,9 +81,9 @@ def main(argv):
         # ssl connection for pymongo > 2.1
         # 
         if pymongo.version >= "2.1":
-            con = pymongo.Connection(host, port, slave_okay=True, ssl=ssl)
+        	con = pymongo.Connection(host, port, slave_okay=True, ssl=ssl)
         else:
-            con = pymongo.Connection(host, port, slave_okay=True)
+        	con = pymongo.Connection(host, port, slave_okay=True)
 
         if user and passwd:
             db = con["admin"]
@@ -103,7 +103,7 @@ def main(argv):
     if action == "connections":
         check_connections(con, warning, critical, perf_data)
     elif action == "replication_lag":
-        check_rep_lag(con, warning, critical, perf_data)
+        check_rep_lag(con, host, warning, critical, perf_data)
     elif action == "replset_state":
         check_replset_state(con)
     elif action == "memory":
@@ -182,74 +182,44 @@ def check_connections(con, warning, critical, perf_data):
         exit_with_general_critical(e)
 
 
-def check_rep_lag(con, warning, critical, perf_data):
+def check_rep_lag(con, host, warning, critical, perf_data):
     warning = warning or 600
     critical = critical or 3600
     try:
-        isMasterStatus = con.admin.command("ismaster", "1")
-        if not isMasterStatus['ismaster']:
-            print "OK - This is a slave."
-            sys.exit(0)
-
-        rs_status = con.admin.command("replSetGetStatus")
-
-        slaveDelays={}
-
-        try:
-            #
-            # this query fails if --keyfile is enabled
-            #
-            rs_conf = con.local.system.replset.find_one()
-
-            for member in rs_conf['members']:
-                # mongod 2.0.2 does not include the port if it is running on the default port
-                if member['host'].find(':') == -1:
-                    member['host'] = member['host'] + ":27017" 
-                if member.get('slaveDelay') is not None:
-                    slaveDelays[member['host']] = member.get('slaveDelay')
-                else:
-                    slaveDelays[member['host']] = 0
-        except:
-            for member in rs_status['members']:
-                slaveDelays[member['name']] = 0
-
-        for member in rs_status['members']:
-            if member['stateStr'] == 'PRIMARY':
-                lastMasterOpTime = member['optime'].time
-
-        if lastMasterOpTime is None:
-            print "CRITICAL - No active PRIMARY, can't get lag info"
-            sys.exit(2)
-
-        data = ""
-        lag = 0
-        for member in rs_status['members']:
-            if member['stateStr'] == 'SECONDARY':
-                lastSlaveOpTime = member['optime'].time
-                replicationLag = lastMasterOpTime - lastSlaveOpTime - slaveDelays[member['name']]
-                
-                if replicationLag is None:
-                    replicationLag = 0
-                    
-                data = data + member['name'] + " lag=%s;" % replicationLag
-                lag = max(lag, replicationLag)
-
-        data = data[0:len(data)-1]
-        message = "Max replication lag: %i [%s]" % (lag, data)
-        if perf_data:
-            message += " | max_replication_lag=%is " % lag
-        message += "| replication_lag=%i" % lag
-        if lag >= critical:
-            print "CRITICAL - " + message
-            sys.exit(2)
-        elif lag >= warning:
-            print "WARNING - " + message
-            sys.exit(1)
-        else:
-            print "OK - " + message
-            sys.exit(0)
-
+    	db = con.admin
+        db.read_preference = pymongo.ReadPreference.SECONDARY
+        
+        # Get replica set status
+        rs_status = db.command("replSetGetStatus")
+        
+        # Find the primary and/or the current node
+        for member in rs_status["members"]:
+        	if member["stateStr"] == "PRIMARY":
+        		primary_node = (member["name"], member["optimeDate"])
+    		if member["name"].split(":")[0] == host:
+    			host_node = member
+		
+		if host_node["stateStr"] == "PRIMARY":
+			print "OK - This is the primary."
+			sys.exit(0)
+		
+		# Find the difference in optime between current node and PRIMARY
+		if primary_node[1] > host_node["optimeDate"]:
+			optime_lag = primary_node[1] - host_node["optimeDate"]
+		else:
+			optime_lag = host_node["optimeDate"] - primary_node[1]
+		if optime_lag.seconds > critical:
+			print "CRITICAL - lag is " + optime_lag.seconds + " seconds"
+			sys.exit(2)
+		elif optime_lag.seconds > warning:
+			print "WARNING - lag is " + optime_lag.seconds + " seconds"
+			sys.exit(1)
+		else:
+			print "OK - lag is " + optime_lag.seconds + " seconds"
+			sys.exit(0)
+			
     except Exception, e:
+    	print e
         exit_with_general_critical(e)
 
 
