@@ -196,7 +196,7 @@ def check_rep_lag(con, host, warning, critical, perf_data):
         for member in rs_status["members"]:
         	if member["stateStr"] == "PRIMARY":
         		primary_node = (member["name"], member["optimeDate"])
-    		if member["name"].split(":")[0] == host:
+    		if member["name"].split(":")[0].startswith(host):
     			host_node = member
 		
 		if host_node["stateStr"] == "PRIMARY":
@@ -208,14 +208,15 @@ def check_rep_lag(con, host, warning, critical, perf_data):
 			optime_lag = primary_node[1] - host_node["optimeDate"]
 		else:
 			optime_lag = host_node["optimeDate"] - primary_node[1]
+        lag = str(optime_lag.seconds)
 		if optime_lag.seconds > critical:
-			print "CRITICAL - lag is " + optime_lag.seconds + " seconds"
+			print "CRITICAL - lag is " + lag + " seconds"
 			sys.exit(2)
-		elif optime_lag.seconds > warning:
-			print "WARNING - lag is " + optime_lag.seconds + " seconds"
+		elif lag > warning:
+			print "WARNING - lag is " + lag + " seconds"
 			sys.exit(1)
 		else:
-			print "OK - lag is " + optime_lag.seconds + " seconds"
+			print "OK - lag is " + lag + " seconds"
 			sys.exit(0)
 			
     except Exception, e:
