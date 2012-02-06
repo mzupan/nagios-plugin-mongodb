@@ -81,7 +81,7 @@ def main(argv):
         # ssl connection for pymongo > 2.1
         # 
         if pymongo.version >= "2.1":
-        	con = pymongo.Connection(host, port, slave_okay=True, ssl=ssl)
+        	con = pymongo.Connection(host, port, ssl=ssl)
         else:
         	con = pymongo.Connection(host, port, slave_okay=True)
 
@@ -132,6 +132,10 @@ def exit_with_general_critical(e):
         print "CRITICAL - General MongoDB Error:", e
         sys.exit(2)
 
+def set_read_preference(db):
+    if pymongo.verison >= "2.1":
+        db.read_preference = pymongo.ReadPreference.SECONDARY
+
 def check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time):
     warning = warning or 3
     critical = critical or 6
@@ -155,6 +159,7 @@ def check_connections(con, warning, critical, perf_data):
     critical = critical or 95
     try:
         try:
+            set_read_preference(con.admin)
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1), ('repl', 1)]))
         except:
             data = con.admin.command(pymongo.son.SON([('serverStatus', 1), ('repl', 1)]))
@@ -186,8 +191,8 @@ def check_rep_lag(con, host, warning, critical, perf_data):
     warning = warning or 600
     critical = critical or 3600
     try:
+        set_read_preference(con.admin)
     	db = con.admin
-        db.read_preference = pymongo.ReadPreference.SECONDARY
         
         # Get replica set status
         rs_status = db.command("replSetGetStatus")
@@ -232,6 +237,7 @@ def check_memory(con, warning, critical, perf_data):
     critical = critical or 16
     try:
         try:
+            set_read_preference(con.admin)
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
         except:
             data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
@@ -270,6 +276,7 @@ def check_lock(con, warning, critical, perf_data):
     critical = critical or 30
     try:
         try:
+            set_read_preference(con.admin)
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
         except:
             data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
@@ -307,6 +314,7 @@ def check_flushing(con, warning, critical, avg, perf_data):
     critical = critical or 15000
     try:
         try:
+            set_read_preference(con.admin)
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
         except:
             data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
@@ -341,6 +349,7 @@ def index_miss_ratio(con, warning, critical, perf_data):
     critical = critical or 30
     try:
         try:
+            set_read_preference(con.admin)
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
         except:
             data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
@@ -377,6 +386,7 @@ def index_miss_ratio(con, warning, critical, perf_data):
 def check_replset_state(con):
     try:
         try:
+            set_read_preference(con.admin)
             data = con.admin.command(pymongo.son_manipulator.SON([('replSetGetStatus', 1)]))
         except:
             data = con.admin.command(pymongo.son.SON([('replSetGetStatus', 1)]))
@@ -417,6 +427,7 @@ def check_replset_state(con):
 def check_databases(con, warning, critical):
     try:
         try:
+            set_read_preference(con.admin)
             data = con.admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
         except:
             data = con.admin.command(pymongo.son.SON([('listDatabases', 1)]))
@@ -439,6 +450,7 @@ def check_databases(con, warning, critical):
 def check_collections(con, warning, critical):
     try:
         try:
+            set_read_preference(con.admin)
             data = con.admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
         except:
             data = con.admin.command(pymongo.son.SON([('listDatabases', 1)]))
@@ -467,6 +479,7 @@ def check_database_size(con, database, warning, critical, perf_data):
     critical = critical or 1000
     perfdata = ""
     try:
+        set_read_preference(con.admin)
         data = con[database].command('dbstats')
         storage_size = data['storageSize'] / 1024 / 1024
         if perf_data:
