@@ -221,22 +221,21 @@ def check_rep_lag(con, host, warning, critical, perf_data):
 			sys.exit(0)
 		
 		# Find the difference in optime between current node and PRIMARY
-		optime_lag = abs(primary_node[1] - host_node["optimeDate"])
+        optime_lag = abs(primary_node[1] - host_node["optimeDate"])
         lag = str(optime_lag.seconds)
 		if optime_lag.seconds > critical:
-			print "CRITICAL - lag is " + lag + " seconds"
-			sys.exit(2)
-		elif lag > warning:
-			print "WARNING - lag is " + lag + " seconds"
-			sys.exit(1)
-		else:
-			print "OK - lag is " + lag + " seconds"
-			sys.exit(0)
-			
-    except Exception, e:
-    	print e
-        exit_with_general_critical(e)
+            print "CRITICAL - lag is " + lag + " seconds"
+            sys.exit(2)
+        elif lag > warning:
+            print "WARNING - lag is " + lag + " seconds"
+            sys.exit(1)
+        else:
+            print "OK - lag is " + lag + " seconds"
+            sys.exit(0)
 
+    except Exception, e:
+        print e
+        exit_with_general_critical(e)
 
 def check_memory(con, warning, critical, perf_data):
     #
