@@ -192,27 +192,36 @@ def check_rep_lag(con, host, warning, critical, perf_data):
     critical = critical or 3600
     try:
         set_read_preference(con.admin)
-    	db = con.admin
         
         # Get replica set status
-        rs_status = db.command("replSetGetStatus")
+        rs_status = con.admin.command("replSetGetStatus")
         
         # Find the primary and/or the current node
+        primary_node = None
+        host_node = None
         for member in rs_status["members"]:
         	if member["stateStr"] == "PRIMARY":
         		primary_node = (member["name"], member["optimeDate"])
     		if member["name"].split(":")[0].startswith(host):
     			host_node = member
 		
+        # Check if we're in the middle of an election and don't have a primary
+        if primary_node is None:
+            print "WARNING - No primary defined. In an election?"
+            sys.exit(1)
+        
+        # Check if we failed to find the current host
+        if host_node is None:
+            print "CRITICAL - Unable to find host '" + host + "' in replica set."
+            sys.exit(2)
+        
+        # Is the specified host the primary?
 		if host_node["stateStr"] == "PRIMARY":
 			print "OK - This is the primary."
 			sys.exit(0)
 		
 		# Find the difference in optime between current node and PRIMARY
-		if primary_node[1] > host_node["optimeDate"]:
-			optime_lag = primary_node[1] - host_node["optimeDate"]
-		else:
-			optime_lag = host_node["optimeDate"] - primary_node[1]
+		optime_lag = abs(primary_node[1] - host_node["optimeDate"])
         lag = str(optime_lag.seconds)
 		if optime_lag.seconds > critical:
 			print "CRITICAL - lag is " + lag + " seconds"
