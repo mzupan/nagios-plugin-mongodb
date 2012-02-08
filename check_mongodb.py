@@ -81,7 +81,7 @@ def main(argv):
         # ssl connection for pymongo > 2.1
         # 
         if pymongo.version >= "2.1":
-            con = pymongo.Connection(host, port, slave_okay=True, ssl=ssl)
+            con = pymongo.Connection(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl)
         else:
             con = pymongo.Connection(host, port, slave_okay=True)
 
