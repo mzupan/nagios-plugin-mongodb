@@ -226,7 +226,7 @@ def check_rep_lag(con, host, warning, critical, perf_data):
         if optime_lag.seconds > critical:
             print "CRITICAL - lag is " + lag + " seconds"
             sys.exit(2)
-        elif lag > warning:
+        elif optime_lag.seconds > warning:
             print "WARNING - lag is " + lag + " seconds"
             sys.exit(1)
         else:
