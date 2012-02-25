@@ -29,6 +29,7 @@ import textwrap
 
 try:
     import pymongo
+    import pymongo.son
 except ImportError, e:
     print e
     sys.exit(2)
