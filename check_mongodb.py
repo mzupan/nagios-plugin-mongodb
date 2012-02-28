@@ -29,6 +29,7 @@ import textwrap
 
 try:
     import pymongo
+    import pymongo.son
 except ImportError, e:
     print e
     sys.exit(2)
@@ -133,7 +134,7 @@ def exit_with_general_critical(e):
         sys.exit(2)
 
 def set_read_preference(db):
-    if pymongo.verison >= "2.1":
+    if pymongo.version >= "2.1":
         db.read_preference = pymongo.ReadPreference.SECONDARY
 
 def check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time):
