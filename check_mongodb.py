@@ -62,7 +62,9 @@ def main(argv):
     p.add_option('-p', '--pass', action='store', type='string', dest='passwd', default=None, help='The password you want to use for that user')
     p.add_option('-W', '--warning', action='store', type='float', dest='warning', default=None, help='The warning threshold we want to set')
     p.add_option('-C', '--critical', action='store', type='float', dest='critical', default=None, help='The critical threshold we want to set')
-    p.add_option('-A', '--action', action='store', type='string', dest='action', default='connect', help='The action you want to take')
+    p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
+                 choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
+                          'index_miss_ratio', 'databases', 'collections', 'database_size'])
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
     p.add_option('-d', '--database', action='store', dest='database', default='admin', help='Specify the database to check')
     p.add_option('-s', '--ssl', dest='ssl', default=False, action='callback', callback=optional_arg(True), help='Connect using SSL')
