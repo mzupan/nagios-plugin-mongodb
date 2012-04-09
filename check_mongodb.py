@@ -35,9 +35,9 @@ except ImportError, e:
 
 # As of pymongo v 1.9 the SON API is part of the BSON package, therefore attempt
 # to import from there and fall back to pymongo in cases of older pymongo
-try:
-    import bcson.son as son
-except ImportError:
+if pymongo.version >= "1.9":
+    import bson.son as son
+else:
     import pymongo.son as son
 
 #
