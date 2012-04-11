@@ -33,6 +33,13 @@ except ImportError, e:
     print e
     sys.exit(2)
 
+# As of pymongo v 1.9 the SON API is part of the BSON package, therefore attempt
+# to import from there and fall back to pymongo in cases of older pymongo
+if pymongo.version >= "1.9":
+    import bson.son as son
+else:
+    import pymongo.son as son
+
 #
 # thanks to http://stackoverflow.com/a/1229667/72987
 #
@@ -55,7 +62,9 @@ def main(argv):
     p.add_option('-p', '--pass', action='store', type='string', dest='passwd', default=None, help='The password you want to use for that user')
     p.add_option('-W', '--warning', action='store', type='float', dest='warning', default=None, help='The warning threshold we want to set')
     p.add_option('-C', '--critical', action='store', type='float', dest='critical', default=None, help='The critical threshold we want to set')
-    p.add_option('-A', '--action', action='store', type='string', dest='action', default='connect', help='The action you want to take')
+    p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
+                 choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
+                          'index_miss_ratio', 'databases', 'collections', 'database_size'])
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
     p.add_option('-d', '--database', action='store', dest='database', default='admin', help='Specify the database to check')
     p.add_option('-s', '--ssl', dest='ssl', default=False, action='callback', callback=optional_arg(True), help='Connect using SSL')
@@ -81,7 +90,7 @@ def main(argv):
         # ssl connection for pymongo > 2.1
         # 
         if pymongo.version >= "2.1":
-            con = pymongo.Connection(host, port, slave_okay=True, ssl=ssl)
+            con = pymongo.Connection(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl)
         else:
             con = pymongo.Connection(host, port, slave_okay=True)
 
@@ -89,7 +98,7 @@ def main(argv):
             db = con["admin"]
             db.authenticate(user, passwd)
     except Exception, e:
-        if isinstance(e,pymongo.errors.AutoReconnect) and str(e).find("arbiter") != -1:
+        if isinstance(e,pymongo.errors.AutoReconnect) and str(e).find(" is an arbiter") != -1:
             # We got a pymongo AutoReconnect exception that tells us we connected to an Arbiter Server
             # This means: Arbiter is reachable and can answer requests/votes - this is all we need to know from an arbiter
             print "OK - State: 7 (Arbiter)"
@@ -103,7 +112,7 @@ def main(argv):
     if action == "connections":
         check_connections(con, warning, critical, perf_data)
     elif action == "replication_lag":
-        check_rep_lag(con, warning, critical, perf_data)
+        check_rep_lag(con, host, warning, critical, perf_data)
     elif action == "replset_state":
         check_replset_state(con)
     elif action == "memory":
@@ -132,6 +141,10 @@ def exit_with_general_critical(e):
         print "CRITICAL - General MongoDB Error:", e
         sys.exit(2)
 
+def set_read_preference(db):
+    if pymongo.version >= "2.1":
+        db.read_preference = pymongo.ReadPreference.SECONDARY
+
 def check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time):
     warning = warning or 3
     critical = critical or 6
@@ -155,9 +168,10 @@ def check_connections(con, warning, critical, perf_data):
     critical = critical or 95
     try:
         try:
+            set_read_preference(con.admin)
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1), ('repl', 1)]))
         except:
-            data = con.admin.command(pymongo.son.SON([('serverStatus', 1), ('repl', 1)]))
+            data = con.admin.command(son.SON([('serverStatus', 1), ('repl', 1)]))
 
         current = float(data['connections']['current'])
         available = float(data['connections']['available'])
@@ -182,72 +196,55 @@ def check_connections(con, warning, critical, perf_data):
         exit_with_general_critical(e)
 
 
-def check_rep_lag(con, warning, critical, perf_data):
+def check_rep_lag(con, host, warning, critical, perf_data):
     warning = warning or 600
     critical = critical or 3600
     try:
-        isMasterStatus = con.admin.command("ismaster", "1")
-        if not isMasterStatus['ismaster']:
-            print "OK - This is a slave."
-            sys.exit(0)
+        set_read_preference(con.admin)
 
+        # Get replica set status
         rs_status = con.admin.command("replSetGetStatus")
 
-        slaveDelays={}
+        # Find the primary and/or the current node
+        primary_node = None
+        host_node = None
+        for member in rs_status["members"]:
+            if member["stateStr"] == "PRIMARY":
+                primary_node = (member["name"], member["optimeDate"])
+            if member["name"].split(":")[0].startswith(host):
+                host_node = member
 
-        try:
-            #
-            # this query fails if --keyfile is enabled
-            #
-            rs_conf = con.local.system.replset.find_one()
+        # Check if we're in the middle of an election and don't have a primary
+        if primary_node is None:
+            print "WARNING - No primary defined. In an election?"
+            sys.exit(1)
 
-            for member in rs_conf['members']:
-                if member.get('slaveDelay') is not None:
-                    slaveDelays[member['host']] = member.get('slaveDelay')
-                else:
-                    slaveDelays[member['host']] = 0
-        except:
-            for member in rs_status['members']:
-                slaveDelays[member['name']] = 0
-
-        for member in rs_status['members']:
-            if member['stateStr'] == 'PRIMARY':
-                lastMasterOpTime = member['optime'].time
-
-        if lastMasterOpTime is None:
-            print "CRITICAL - No active PRIMARY, can't get lag info"
+        # Check if we failed to find the current host
+        if host_node is None:
+            print "CRITICAL - Unable to find host '" + host + "' in replica set."
             sys.exit(2)
 
-        data = ""
-        lag = 0
-        for member in rs_status['members']:
-            if member['stateStr'] == 'SECONDARY':
-                lastSlaveOpTime = member['optime'].time
-                replicationLag = lastMasterOpTime - lastSlaveOpTime - slaveDelays[member['name']]
-                
-                if replicationLag is None:
-                    replicationLag = 0
-                    
-                data = data + member['name'] + " lag=%s;" % replicationLag
-                lag = max(lag, replicationLag)
+        # Is the specified host the primary?
+        if host_node["stateStr"] == "PRIMARY":
+            print "OK - This is the primary."
+            sys.exit(0)
 
-        data = data[0:len(data)-1]
-        message = "Max replication lag: %i [%s]" % (lag, data)
-        if perf_data:
-            message += " | max_replication_lag=%is " % lag
-        if lag >= critical:
-            print "CRITICAL - " + message
+        # Find the difference in optime between current node and PRIMARY
+        optime_lag = abs(primary_node[1] - host_node["optimeDate"])
+        lag = str(optime_lag.seconds)
+        if optime_lag.seconds > critical:
+            print "CRITICAL - lag is " + lag + " seconds"
             sys.exit(2)
-        elif lag >= warning:
-            print "WARNING - " + message
+        elif optime_lag.seconds > warning:
+            print "WARNING - lag is " + lag + " seconds"
             sys.exit(1)
         else:
-            print "OK - " + message
+            print "OK - lag is " + lag + " seconds"
             sys.exit(0)
 
     except Exception, e:
+        print e
         exit_with_general_critical(e)
-
 
 def check_memory(con, warning, critical, perf_data):
     #
@@ -257,9 +254,10 @@ def check_memory(con, warning, critical, perf_data):
     critical = critical or 16
     try:
         try:
+            set_read_preference(con.admin)
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
         except:
-            data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
+            data = con.admin.command(son.SON([('serverStatus', 1)]))
 
 
         if not data['mem']['supported']:
@@ -295,9 +293,10 @@ def check_lock(con, warning, critical, perf_data):
     critical = critical or 30
     try:
         try:
+            set_read_preference(con.admin)
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
         except:
-            data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
+            data = con.admin.command(son.SON([('serverStatus', 1)]))
 
         #
         # calculate percentage
@@ -331,9 +330,10 @@ def check_flushing(con, warning, critical, avg, perf_data):
     critical = critical or 15000
     try:
         try:
+            set_read_preference(con.admin)
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
         except:
-            data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
+            data = con.admin.command(son.SON([('serverStatus', 1)]))
 
         if avg:
             flush_time = float(data['backgroundFlushing']['average_ms'])
@@ -365,9 +365,10 @@ def index_miss_ratio(con, warning, critical, perf_data):
     critical = critical or 30
     try:
         try:
+            set_read_preference(con.admin)
             data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
         except:
-            data = con.admin.command(pymongo.son.SON([('serverStatus', 1)]))
+            data = con.admin.command(son.SON([('serverStatus', 1)]))
 
         try:
             miss_ratio = float(data['indexCounters']['btree']['missRatio'])
@@ -401,9 +402,10 @@ def index_miss_ratio(con, warning, critical, perf_data):
 def check_replset_state(con):
     try:
         try:
+            set_read_preference(con.admin)
             data = con.admin.command(pymongo.son_manipulator.SON([('replSetGetStatus', 1)]))
         except:
-            data = con.admin.command(pymongo.son.SON([('replSetGetStatus', 1)]))
+            data = con.admin.command(son.SON([('replSetGetStatus', 1)]))
 
         state = int(data['myState'])
 
@@ -441,9 +443,10 @@ def check_replset_state(con):
 def check_databases(con, warning, critical):
     try:
         try:
+            set_read_preference(con.admin)
             data = con.admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
         except:
-            data = con.admin.command(pymongo.son.SON([('listDatabases', 1)]))
+            data = con.admin.command(son.SON([('listDatabases', 1)]))
 
         count = len(data['databases'])
 
@@ -463,9 +466,10 @@ def check_databases(con, warning, critical):
 def check_collections(con, warning, critical):
     try:
         try:
+            set_read_preference(con.admin)
             data = con.admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
         except:
-            data = con.admin.command(pymongo.son.SON([('listDatabases', 1)]))
+            data = con.admin.command(son.SON([('listDatabases', 1)]))
 
         count = 0
         for db in data['databases']:
@@ -491,6 +495,7 @@ def check_database_size(con, database, warning, critical, perf_data):
     critical = critical or 1000
     perfdata = ""
     try:
+        set_read_preference(con.admin)
         data = con[database].command('dbstats')
         storage_size = data['storageSize'] / 1024 / 1024
         if perf_data:
