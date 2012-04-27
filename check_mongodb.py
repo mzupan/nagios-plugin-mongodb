@@ -211,7 +211,7 @@ def check_rep_lag(con, host, warning, critical, perf_data):
         for member in rs_status["members"]:
             if member["stateStr"] == "PRIMARY":
                 primary_node = (member["name"], member["optimeDate"])
-            if member["name"].split(":")[0].startswith(host):
+            if member["name"].split(":")[0].lower() == host.lower():
                 host_node = member
 
         # Check if we're in the middle of an election and don't have a primary
@@ -221,7 +221,8 @@ def check_rep_lag(con, host, warning, critical, perf_data):
 
         # Check if we failed to find the current host
         if host_node is None:
-            print "CRITICAL - Unable to find host '" + host + "' in replica set."
+            name_list = ', '.join([member["name"].split(":")[0].lower() for member in rs_status["members"]])
+            print "CRITICAL - Unable to match host name '" + host.lower() + "' in replica set ["+ name_list+"]"
             sys.exit(2)
 
         # Is the specified host the primary?
