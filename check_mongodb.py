@@ -67,9 +67,12 @@ def performance_data(perf_data,params):
                 data+=";%s;%s"%(warning,critical)
     return data
 
-
+def numeric_type(param):
+    if ((type(param)==float or type(param)==int or param==None)):
+        return True
+    return False
 def check_levels(param, warning, critical,message,ok=None):
-    if (type(critical)==float or critical==None and (type(warning)==float or warning==None)):
+    if (numeric_type(critical) and numeric_type(warning)):
         if param >= critical:
             print "CRITICAL - " + message
             sys.exit(2)
