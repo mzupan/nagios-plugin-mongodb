@@ -26,7 +26,7 @@ import sys
 import time
 import optparse
 import textwrap
-import json
+
 try:
     import pymongo
 except ImportError, e:
@@ -117,6 +117,7 @@ def main(argv):
     p.add_option('--mapped-memory',action='store_true',dest='mapped_memory',default=False,help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
     p.add_option('-d', '--database', action='store', dest='database', default='admin', help='Specify the database to check')
+    p.add_option('--all-databases', action='store_true', dest='all_databases', default=False, help='Check all databases (action database_size)')
     p.add_option('-s', '--ssl', dest='ssl', default=False, action='callback', callback=optional_arg(True), help='Connect using SSL')
     options, arguments = p.parse_args()
 
@@ -180,7 +181,10 @@ def main(argv):
     elif action == "collections":
         check_collections(con, warning, critical,perf_data)
     elif action == "database_size":
-        check_database_size(con, database, warning, critical, perf_data)
+        if options.all_databases:
+            check_all_databases_size(con,warning, critical, perf_data)
+        else:
+            check_database_size(con, database, warning, critical, perf_data)
     else:
         check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
@@ -501,19 +505,36 @@ def check_collections(con, warning, critical,perf_data=None):
         message="Number of collections: %.0f" % count
         message+=performance_data(perf_data,[(count,"collections",warning,critical,message)])
         check_levels(count,warning,critical,message)
-        if count >= critical:
-            print "CRITICAL - Number of collections: %.0f" % count
-            sys.exit(2)
-        elif count >= warning:
-            print "WARNING - Number of collections: %.0f" % count
-            sys.exit(1)
-        else:
-            print "OK - Number of collections: %.0f" % count
-            sys.exit(0)
 
     except Exception, e:
         exit_with_general_critical(e)
 
+
+def check_all_databases_size(con, warning, critical, perf_data):
+    warning = warning or 100
+    critical = critical or 1000
+
+    try: 
+        set_read_preference(con.admin)
+        all_dbs_data = con.admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
+    except:
+        all_dbs_data = con.admin.command(son.SON([('listDatabases', 1)]))
+    
+    total_storage_size=0
+    message=""
+    perf_data_param=[()]
+    for db in all_dbs_data['databases']:
+        database = db['name']
+        data = con[database].command('dbstats') 
+        storage_size = data['storageSize'] / 1024 / 1024
+        message+="; Database %s size: %.0f MB"%(database,storage_size)
+        perf_data_param.append((storage_size,database+"_database_size"))
+        total_storage_size+=storage_size
+    
+    perf_data_param[0]=(total_storage_size,"total_size",warning,critical)
+    message+=performance_data(perf_data,perf_data_param)
+    message="Total size: %.0f MB" % total_storage_size + message
+    check_levels(total_storage_size,warning,critical,message)
 
 def check_database_size(con, database, warning, critical, perf_data):
     warning = warning or 100
