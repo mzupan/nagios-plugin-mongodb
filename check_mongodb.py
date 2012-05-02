@@ -83,7 +83,6 @@ def check_levels(param, warning, critical,message,ok=None):
             print "OK - " + message
             sys.exit(0)
     else:
-        param=str(param)
         if param in critical:
             print "CRITICAL - " + message
             sys.exit(2)
@@ -440,8 +439,8 @@ def index_miss_ratio(con, warning, critical, perf_data):
 
 
 def check_replset_state(con,perf_data,warning="",critical=""):
-    warning = warning.split(",") if warning else [0,3,5]
-    critical= critical.split(",") if critical else [8,4]
+    warning = [int(x) for x in warning.split(",")] if warning else [0,3,5]
+    critical= [int(x) for x in critical.split(",") ] if critical else [8,4]
     ok = range(0,8) #should include the range of all posiible values
     try:
         try:
