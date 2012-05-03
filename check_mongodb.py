@@ -60,7 +60,7 @@ def performance_data(perf_data,params):
         for p in params:
             p+=(None,None,None,None)
             param,param_name,warning,critical=p[0:4];
-            data +=" %s=%s" % (param_name,param)    
+            data +=" %s=%s" % (param_name,str(param))    
             if warning or critical:
                 warning=warning or 0
                 critical=critical or 0
@@ -71,7 +71,7 @@ def numeric_type(param):
     if ((type(param)==float or type(param)==int or param==None)):
         return True
     return False
-def check_levels(param, warning, critical,message,ok=None):
+def check_levels(param, warning, critical,message,ok=[]):
     if (numeric_type(critical) and numeric_type(warning)):
         if param >= critical:
             print "CRITICAL - " + message
@@ -96,7 +96,7 @@ def check_levels(param, warning, critical,message,ok=None):
             sys.exit(0)
 
         # unexpected param value
-        print "CRITICAL - Unexpected value : " + param + "; " + message
+        print "CRITICAL - Unexpected value : %d" % param + "; " + message
         sys.exit(2)
 
 
@@ -440,36 +440,42 @@ def index_miss_ratio(con, warning, critical, perf_data):
 
 def check_replset_state(con,perf_data,warning="",critical=""):
     warning = [int(x) for x in warning.split(",")] if warning else [0,3,5]
-    critical= [int(x) for x in critical.split(",") ] if critical else [8,4]
-    ok = range(0,8) #should include the range of all posiible values
+    critical= [int(x) for x in critical.split(",") ] if critical else [8,4,-1]
+    ok = range(-1,8) #should include the range of all posiible values
     try:
         try:
-            set_read_preference(con.admin)
-            data = con.admin.command(pymongo.son_manipulator.SON([('replSetGetStatus', 1)]))
-        except:
-            data = con.admin.command(son.SON([('replSetGetStatus', 1)]))
+            try:
+                set_read_preference(con.admin)
+                data = con.admin.command(pymongo.son_manipulator.SON([('replSetGetStatus', 1)]))
+            except:
+                data = con.admin.command(son.SON([('replSetGetStatus', 1)]))
+            state = int(data['myState'])
+        except pymongo.errors.OperationFailure,e :
+            if e.code==None and e.message.find('failed: not running with --replSet"'):
+                state=-1
 
-        state = int(data['myState'])
-        perf_message=performance_data(perf_data,[(state,"state")])
         if state == 8:
-            message="State: %i (Down)" % state + perf_message
+            message="State: %i (Down)" % state
         elif state == 4:
-            message="State: %i (Fatal error)" % state+ perf_message
+            message="State: %i (Fatal error)" % state
         elif state == 0:
-            message="State: %i (Starting up, phase1)" % state+ perf_message
+            message="State: %i (Starting up, phase1)" % state
         elif state == 3:
-            message="State: %i (Recovering)" % state+ perf_message
+            message="State: %i (Recovering)" % state
         elif state == 5:
-            message="State: %i (Starting up, phase2)" % state+ perf_message
+            message="State: %i (Starting up, phase2)" % state
         elif state == 1:
-            message="State: %i (Primary)" % state +perf_message
+            message="State: %i (Primary)" % state
         elif state == 2:
-            message="State: %i (Secondary)" % state + perf_message
+            message="State: %i (Secondary)" % state
         elif state == 7:
-            message="State: %i (Arbiter)" % state+ perf_message
+            message="State: %i (Arbiter)" % state
+        elif state==-1:
+            message="Not running with replSet"
         else:
-            message="State: %i (Unknown state)" % state+ perf_message
-        check_levels(state,warning,critical,message, ok)
+            message="State: %i (Unknown state)" % state
+        message+=performance_data(perf_data,[(state,"state")])
+        check_levels(state,warning,critical,message,ok)
     except Exception, e:
         exit_with_general_critical(e)
 
