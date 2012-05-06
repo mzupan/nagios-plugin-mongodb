@@ -111,7 +111,7 @@ def main(argv):
     p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold we want to set')
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
-                          'index_miss_ratio', 'databases', 'collections', 'database_size'])
+                          'index_miss_ratio', 'databases', 'collections', 'database_size','queues'])
     p.add_option('--max-lag',action='store_true',dest='max_lag',default=False,help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory',action='store_true',dest='mapped_memory',default=False,help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -167,6 +167,8 @@ def main(argv):
         check_replset_state(con,perf_data, warning , critical )
     elif action == "memory":
         check_memory(con, warning, critical, perf_data,options.mapped_memory)
+    elif action == "queues":
+        check_queues(con, warning, critical, perf_data)
     elif action == "lock":
         check_lock(con, warning, critical, perf_data)
     elif action == "flushing":
@@ -565,7 +567,28 @@ def check_database_size(con, database, warning, critical, perf_data):
     except Exception, e:
         exit_with_general_critical(e)
 
+def check_queues(con, warning, critical, perf_data):
+    warning = warning or 10
+    critical = critical or 30
+    try:
+        try:
+            set_read_preference(con.admin)
+            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
+        except:
+            data = con.admin.command(son.SON([('serverStatus', 1)]))
 
+        #lock_percentage = float(data['globalLock']['lockTime']) / float(data['globalLock']['totalTime']) * 100
+        total_queues = float(data['globalLock']['currentQueue']['total']) 
+        readers_queues = float(data['globalLock']['currentQueue']['readers']) 
+        writers_queues = float(data['globalLock']['currentQueue']['writers']) 
+        message = "Current queue is : total = %d, readers = %d, writers = %d" % (total_queues, readers_queues, writers_queues)
+        message+=performance_data(perf_data,[(total_queues, "total_queues",warning,critical),(readers_queues, "readers_queues"),(writers_queues,"writers_queues")])
+        check_levels(total_queues,warning,critical,message)
+
+    except Exception, e:
+        exit_with_general_critical(e)
+
+    
 #
 # main app
 #
