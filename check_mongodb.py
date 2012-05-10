@@ -111,7 +111,7 @@ def main(argv):
     p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold we want to set')
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
-                          'index_miss_ratio', 'databases', 'collections', 'database_size','queues'])
+                          'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog'])
     p.add_option('--max-lag',action='store_true',dest='max_lag',default=False,help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory',action='store_true',dest='mapped_memory',default=False,help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -181,6 +181,8 @@ def main(argv):
         check_databases(con, warning, critical,perf_data)
     elif action == "collections":
         check_collections(con, warning, critical,perf_data)
+    elif action == "oplog":
+        check_oplog(con, warning, critical,perf_data)
     elif action == "database_size":
         if options.all_databases:
             check_all_databases_size(con,warning, critical, perf_data)
@@ -577,7 +579,6 @@ def check_queues(con, warning, critical, perf_data):
         except:
             data = con.admin.command(son.SON([('serverStatus', 1)]))
 
-        #lock_percentage = float(data['globalLock']['lockTime']) / float(data['globalLock']['totalTime']) * 100
         total_queues = float(data['globalLock']['currentQueue']['total']) 
         readers_queues = float(data['globalLock']['currentQueue']['readers']) 
         writers_queues = float(data['globalLock']['currentQueue']['writers']) 
@@ -588,6 +589,48 @@ def check_queues(con, warning, critical, perf_data):
     except Exception, e:
         exit_with_general_critical(e)
 
+def check_oplog(con, warning, critical, perf_data):
+    """ Checking the oplog time - the time of the log currntly saved in the oplog collection
+    defaults:
+        critical 4 hours
+        warning 24 hours 
+    those can be changed as usual with -C and -W parameters"""
+    warning = warning or 24 
+    critical = critical or 4
+    try:
+        db = con.local
+        ol=db.system.namespaces.find_one({"name":"local.oplog.rs"}) 
+        if (db.system.namespaces.find_one({"name":"local.oplog.rs"}) != None) :
+            oplog = "oplog.rs";
+        else :
+            ol=db.system.namespaces.find_one({"name":"local.oplog.$main"})
+            if (db.system.namespaces.find_one({"name":"local.oplog.$main"}) != None) :
+                oplog = "oplog.$main";
+            else :
+                message = "neither master/slave nor replica set replication detected";
+                check_levels(None,warning,critical,message)
+
+        try:
+                set_read_preference(con.admin)
+                data=con.local.command(pymongo.son_manipulator.SON([('collstats',oplog)]))
+        except:
+                data = con.admin.command(son.SON([('collstats',oplog)]))
+
+        ol_size=data['size']
+        ol_storage_size=data['storageSize']
+        ol_used_storage=int(float(ol_size)/ol_storage_size*100+1)
+        ol=con.local[oplog]
+        firstc = ol.find().sort("$natural",pymongo.ASCENDING).limit(1)[0]['ts']
+        lastc = ol.find().sort("$natural",pymongo.DESCENDING).limit(1)[0]['ts']
+        time_in_oplog= (lastc.as_datetime()-firstc.as_datetime())
+        message="Oplog saves "+ str(time_in_oplog) + " %d%% used" %ol_used_storage 
+        hours_in_oplog= time_in_oplog.total_seconds()/60/60
+        approx_level=hours_in_oplog*100/ol_used_storage
+        message+=performance_data(perf_data,[("%.2f " % hours_in_oplog,'oplog_time',warning,critical),("%.2f " % approx_level, 'oplog_time_100_percent_used')])
+        check_levels(-approx_level,-warning,-critical,message)
+
+    except Exception, e:
+        exit_with_general_critical(e)
     
 #
 # main app
