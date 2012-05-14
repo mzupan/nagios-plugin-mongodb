@@ -53,6 +53,53 @@ def optional_arg(arg_default):
         setattr(parser.values,option.dest,val)
     return func
 
+def performance_data(perf_data,params):
+    data=''
+    if perf_data:
+        data= " |"
+        for p in params:
+            p+=(None,None,None,None)
+            param,param_name,warning,critical=p[0:4];
+            data +=" %s=%s" % (param_name,str(param))    
+            if warning or critical:
+                warning=warning or 0
+                critical=critical or 0
+                data+=";%s;%s"%(warning,critical)
+    return data
+
+def numeric_type(param):
+    if ((type(param)==float or type(param)==int or param==None)):
+        return True
+    return False
+def check_levels(param, warning, critical,message,ok=[]):
+    if (numeric_type(critical) and numeric_type(warning)):
+        if param >= critical:
+            print "CRITICAL - " + message
+            sys.exit(2)
+        elif param >= warning:
+            print "WARNING - " + message
+            sys.exit(1)
+        else:
+            print "OK - " + message
+            sys.exit(0)
+    else:
+        if param in critical:
+            print "CRITICAL - " + message
+            sys.exit(2)
+
+        if param in warning:
+            print "WARNING - " + message
+            sys.exit(1)
+
+        if param in ok:
+            print "OK - " + message
+            sys.exit(0)
+
+        # unexpected param value
+        print "CRITICAL - Unexpected value : %d" % param + "; " + message
+        sys.exit(2)
+
+
 def main(argv):
     p = optparse.OptionParser(conflict_handler="resolve", description= "This Nagios plugin checks the health of mongodb.")
 
@@ -60,13 +107,16 @@ def main(argv):
     p.add_option('-P', '--port', action='store', type='int', dest='port', default=27017, help='The port mongodb is runnung on')
     p.add_option('-u', '--user', action='store', type='string', dest='user', default=None, help='The username you want to login as')
     p.add_option('-p', '--pass', action='store', type='string', dest='passwd', default=None, help='The password you want to use for that user')
-    p.add_option('-W', '--warning', action='store', type='float', dest='warning', default=None, help='The warning threshold we want to set')
-    p.add_option('-C', '--critical', action='store', type='float', dest='critical', default=None, help='The critical threshold we want to set')
+    p.add_option('-W', '--warning', action='store', dest='warning', default=None, help='The warning threshold we want to set')
+    p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold we want to set')
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
-                          'index_miss_ratio', 'databases', 'collections', 'database_size'])
+                          'index_miss_ratio', 'databases', 'collections', 'database_size','queues'])
+    p.add_option('--max-lag',action='store_true',dest='max_lag',default=False,help='Get max replication lag (for replication_lag action only)')
+    p.add_option('--mapped-memory',action='store_true',dest='mapped_memory',default=False,help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
     p.add_option('-d', '--database', action='store', dest='database', default='admin', help='Specify the database to check')
+    p.add_option('--all-databases', action='store_true', dest='all_databases', default=False, help='Check all databases (action database_size)')
     p.add_option('-s', '--ssl', dest='ssl', default=False, action='callback', callback=optional_arg(True), help='Connect using SSL')
     options, arguments = p.parse_args()
 
@@ -74,13 +124,13 @@ def main(argv):
     port = options.port
     user = options.user
     passwd = options.passwd
-    warning = options.warning
-    critical = options.critical
+    warning = float(options.warning) if (options.warning and options.action!='replset_state') else options.warning 
+    critical = float(options.critical) if (options.critical and options.action!='replset_state') else options.critical
     action = options.action
     perf_data = options.perf_data
+    max_lag = options.max_lag
     database = options.database
     ssl = options.ssl
-
     #
     # moving the login up here and passing in the connection
     #
@@ -112,11 +162,13 @@ def main(argv):
     if action == "connections":
         check_connections(con, warning, critical, perf_data)
     elif action == "replication_lag":
-        check_rep_lag(con, host, warning, critical, perf_data)
+        check_rep_lag(con,  warning, critical, perf_data,max_lag)
     elif action == "replset_state":
-        check_replset_state(con)
+        check_replset_state(con,perf_data, warning , critical )
     elif action == "memory":
-        check_memory(con, warning, critical, perf_data)
+        check_memory(con, warning, critical, perf_data,options.mapped_memory)
+    elif action == "queues":
+        check_queues(con, warning, critical, perf_data)
     elif action == "lock":
         check_lock(con, warning, critical, perf_data)
     elif action == "flushing":
@@ -126,11 +178,14 @@ def main(argv):
     elif action == "index_miss_ratio":
         index_miss_ratio(con, warning, critical, perf_data)
     elif action == "databases":
-        check_databases(con, warning, critical)
+        check_databases(con, warning, critical,perf_data)
     elif action == "collections":
-        check_collections(con, warning, critical)
+        check_collections(con, warning, critical,perf_data)
     elif action == "database_size":
-        check_database_size(con, database, warning, critical, perf_data)
+        if options.all_databases:
+            check_all_databases_size(con,warning, critical, perf_data)
+        else:
+            check_database_size(con, database, warning, critical, perf_data)
     else:
         check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
@@ -149,18 +204,9 @@ def check_connect(host, port, warning, critical, perf_data, user, passwd, conn_t
     warning = warning or 3
     critical = critical or 6
     message = "Connection took %i seconds" % conn_time
-    if perf_data:
-        message += " | connection_time=%is;%i;%i" % (conn_time, warning, critical)
+    message += performance_data(perf_data,[(conn_time,"connection_time",warning,critical)])
 
-    if conn_time >= critical:
-        print "CRITICAL - " + message
-        sys.exit(2)
-    elif conn_time >= warning:
-        print "WARNING - " + message
-        sys.exit(1)
-
-    print "OK - " + message
-    sys.exit(0)
+    check_levels(conn_time,warning,critical,message)
 
 
 def check_connections(con, warning, critical, perf_data):
@@ -178,41 +224,44 @@ def check_connections(con, warning, critical, perf_data):
 
         used_percent = int(float(current / (available + current)) * 100)
         message = "%i percent (%i of %i connections) used" % (used_percent, current, current + available)
-        if perf_data:
-            message += " | used_percent=%i%%;%i;%i" % (used_percent, warning, critical)
-            message += " current_connections=%i" % current
-            message += " available_connections=%i" % available
-        if used_percent >= critical:
-            print "CRITICAL - " + message
-            sys.exit(2)
-        elif used_percent >= warning:
-            print "WARNING - " + message
-            sys.exit(1)
-        else:
-            print "OK - " + message
-            sys.exit(0)
+        message += performance_data(perf_data,[(used_percent,"used_percent",warning, critical),
+                (current,"current_connections"),
+                (available,"available_connections")])
+        check_levels(used_percent,warning,critical,message)
 
     except Exception, e:
         exit_with_general_critical(e)
 
 
-def check_rep_lag(con, host, warning, critical, perf_data):
+def check_rep_lag(con,  warning, critical, perf_data,max_lag):
     warning = warning or 600
     critical = critical or 3600
+    rs_status = {}
+    slaveDelays={}
     try:
         set_read_preference(con.admin)
 
         # Get replica set status
         rs_status = con.admin.command("replSetGetStatus")
-
+        rs_conf = con.local.system.replset.find_one()
+        for member in rs_conf['members']:
+            if member.get('slaveDelay') is not None:
+                slaveDelays[member['host']] = member.get('slaveDelay')
+            else:
+                slaveDelays[member['host']] = 0 
+        #print slaveDelays
         # Find the primary and/or the current node
         primary_node = None
         host_node = None
+        
+        host_status=con.admin.command("ismaster", "1")
+        #print "Is master",host_status
         for member in rs_status["members"]:
             if member["stateStr"] == "PRIMARY":
-                primary_node = (member["name"], member["optimeDate"])
-            if member["name"].split(":")[0].startswith(host):
+                primary_node = member
+            if member["name"]==host_status['me']:
                 host_node = member
+        #print host_node
 
         # Check if we're in the middle of an election and don't have a primary
         if primary_node is None:
@@ -220,33 +269,41 @@ def check_rep_lag(con, host, warning, critical, perf_data):
             sys.exit(1)
 
         # Check if we failed to find the current host
+        # below should never happen
         if host_node is None:
             print "CRITICAL - Unable to find host '" + host + "' in replica set."
             sys.exit(2)
 
         # Is the specified host the primary?
         if host_node["stateStr"] == "PRIMARY":
-            print "OK - This is the primary."
-            sys.exit(0)
+            if max_lag==False:
+                print "OK - This is the primary."
+                sys.exit(0)
+            else:
+                #get the maximal replication lag 
+                data=""
+                maximal_lag=0
+                for member in rs_status['members']:
+                    lastSlaveOpTime = member['optimeDate']
+                    replicationLag = abs(primary_node["optimeDate"] - lastSlaveOpTime).seconds - slaveDelays[member['name']]
+                    data = data + member['name'] + " lag=%d;" % replicationLag
+                    maximal_lag = max(maximal_lag, replicationLag)
+                message = "Maximal lag is "+str( maximal_lag) + " seconds"
+                message +=performance_data(perf_data,[(maximal_lag,"replication_lag",warning, critical)])
+                check_levels(maximal_lag,warning,critical,message) 
 
         # Find the difference in optime between current node and PRIMARY
-        optime_lag = abs(primary_node[1] - host_node["optimeDate"])
-        lag = str(optime_lag.seconds)
-        if optime_lag.seconds > critical:
-            print "CRITICAL - lag is " + lag + " seconds"
-            sys.exit(2)
-        elif optime_lag.seconds > warning:
-            print "WARNING - lag is " + lag + " seconds"
-            sys.exit(1)
-        else:
-            print "OK - lag is " + lag + " seconds"
-            sys.exit(0)
+        optime_lag = abs(primary_node["optimeDate"] - host_node["optimeDate"])
+        lag = optime_lag.seconds
+        message = "Lag is "+ str(lag) + " seconds"
+        message +=performance_data(perf_data,[(lag,"replication_lag",warning, critical)])
+        check_levels(lag,warning+slaveDelays[host_node['name']],critical+slaveDelays[host_node['name']],message)
 
     except Exception, e:
         print e
         exit_with_general_critical(e)
 
-def check_memory(con, warning, critical, perf_data):
+def check_memory(con, warning, critical, perf_data,mapped_memory):
     #
     # These thresholds are basically meaningless, and must be customized to your system's ram
     #
@@ -260,29 +317,44 @@ def check_memory(con, warning, critical, perf_data):
             data = con.admin.command(son.SON([('serverStatus', 1)]))
 
 
-        if not data['mem']['supported']:
+        if not data['mem']['supported'] and not mapped_memory:
             print "OK - Platform not supported for memory info"
             sys.exit(0)
+       
         #
         # convert to gigs
         #
-        mem_resident = float(data['mem']['resident']) / 1024.0
-        mem_virtual = float(data['mem']['mapped']) / 1024.0
-        mem_mapped = float(data['mem']['virtual']) / 1024.0
-        message = "Memory Usage: %.2fGB resident, %.2fGB mapped, %.2fGB virtual" % (mem_resident, mem_mapped, mem_virtual)
-        if perf_data:
-            message += " | memory_usage=%.3fGB;%.3f;%.3f" % (mem_resident, warning, critical)
-            message += " memory_mapped=%.3fGB" % mem_mapped
-            message += " memory_virtual=%.3fGB" % mem_virtual
-        if mem_resident >= critical:
-            print "CRITICAL - " + message
-            sys.exit(2)
-        elif mem_resident >= warning:
-            print "WARNING - " + message
-            sys.exit(1)
+        message = "Memory Usage:"
+        try:
+            mem_resident =float(data['mem']['resident']) / 1024.0 
+            message += " %.2fGB resident,"%( mem_resident)
+        except:
+            mem_resident = 0
+            message +=" resident unsupported,"
+        try:
+            mem_virtual = float(data['mem']['virtual']) / 1024.0
+            message +=" %.2fGB virtual," % mem_virtual
+        except:
+            mem_virtual=0
+            message +=" virtual unsupported,"
+        try:
+            mem_mapped = float(data['mem']['mapped']) / 1024.0
+            message +=" %.2fGB mapped," % mem_mapped
+        except:
+            mem_mapped = 0 
+            message +=" mapped unsupported,"
+        try:
+            mem_mapped_journal = float(data['mem']['mappedWithJournal']) / 1024.0
+            message +=" %.2fGB mappedWithJournal" % mem_mapped_journal
+        except:
+            mem_mapped_journal = 0 
+        message +=performance_data(perf_data,[("%.2f" % mem_resident,"memory_usage",warning, critical),
+                    ("%.2f" % mem_mapped,"memory_mapped"),("%.2f" % mem_virtual,"memory_virtual"),("%.2f" %mem_mapped_journal,"mappedWithJournal")])
+        #added for unsupported systems like Solaris
+        if mapped_memory and mem_resident==0: 
+            check_levels(mem_mapped,warning,critical,message) 
         else:
-            print "OK - " + message
-            sys.exit(0)
+            check_levels(mem_resident,warning,critical,message)
 
     except Exception, e:
         exit_with_general_critical(e)
@@ -303,23 +375,11 @@ def check_lock(con, warning, critical, perf_data):
         #
         lock_percentage = float(data['globalLock']['lockTime']) / float(data['globalLock']['totalTime']) * 100
         message = "Lock Percentage: %.2f%%" % lock_percentage
-        if perf_data:
-            message += " | lock_percentage=%.2f%%;%i;%i" % (lock_percentage, warning, critical)
-
-        if lock_percentage >= critical:
-            print "CRITICAL - " + message
-            sys.exit(2)
-        elif lock_percentage >= warning:
-            print "WARNING - " + message
-            sys.exit(1)
-        else:
-            print "OK - " + message
-            sys.exit(0)
-
+        message+=performance_data(perf_data,[("%.2f" % lock_percentage,"lock_percentage",warning,critical)])
+        check_levels(lock_percentage,warning,critical,message)
 
     except Exception, e:
         exit_with_general_critical(e)
-
 
 def check_flushing(con, warning, critical, avg, perf_data):
     #
@@ -343,22 +403,12 @@ def check_flushing(con, warning, critical, avg, perf_data):
             stat_type = "Last"
 
         message = "%s Flush Time: %.2fms" % (stat_type, flush_time)
-        if perf_data:
-            message += " | %s_flush_time=%.2fms;%.2f;%.2f" % (stat_type.lower(), flush_time, warning, critical)
+        message+=performance_data(perf_data,[("%.2fms" %flush_time,"%s_flush_time" % stat_type.lower(),warning,critical)])
 
-        if flush_time >= critical:
-            print "CRITICAL - " + message
-            sys.exit(2)
-        elif flush_time >= warning:
-            print "WARNING - " + message
-            sys.exit(1)
-        else:
-            print "OK - " + message
-            sys.exit(0)
+        check_levels(flush_time,warning,critical,message)
 
     except Exception, e:
         exit_with_general_critical(e)
-
 
 def index_miss_ratio(con, warning, critical, perf_data):
     warning = warning or 10
@@ -382,65 +432,56 @@ def index_miss_ratio(con, warning, critical, perf_data):
                 sys.exit(1)
 
         message = "Miss Ratio: %.2f" % miss_ratio
-        if perf_data:
-            message += " | index_miss_ratio=%.2f;%i;%i" % (miss_ratio, warning, critical)
+        message+=performance_data(perf_data,[("%.2f" % miss_ratio,"index_miss_ratio" ,warning,critical)])
 
-        if miss_ratio >= critical:
-            print "CRITICAL - " + message
-            sys.exit(2)
-        elif miss_ratio >= warning:
-            print "WARNING - " + message
-            sys.exit(1)
-        else:
-            print "OK - " + message
-            sys.exit(0)
+        check_levels(miss_ratio,warning,critical,message)
 
     except Exception, e:
         exit_with_general_critical(e)
 
 
-def check_replset_state(con):
+def check_replset_state(con,perf_data,warning="",critical=""):
+    warning = [int(x) for x in warning.split(",")] if warning else [0,3,5]
+    critical= [int(x) for x in critical.split(",") ] if critical else [8,4,-1]
+    ok = range(-1,8) #should include the range of all posiible values
     try:
         try:
-            set_read_preference(con.admin)
-            data = con.admin.command(pymongo.son_manipulator.SON([('replSetGetStatus', 1)]))
-        except:
-            data = con.admin.command(son.SON([('replSetGetStatus', 1)]))
-
-        state = int(data['myState'])
+            try:
+                set_read_preference(con.admin)
+                data = con.admin.command(pymongo.son_manipulator.SON([('replSetGetStatus', 1)]))
+            except:
+                data = con.admin.command(son.SON([('replSetGetStatus', 1)]))
+            state = int(data['myState'])
+        except pymongo.errors.OperationFailure,e :
+            if e.code==None and e.message.find('failed: not running with --replSet"'):
+                state=-1
 
         if state == 8:
-            print "CRITICAL - State: %i (Down)" % state
-            sys.exit(2)
+            message="State: %i (Down)" % state
         elif state == 4:
-            print "CRITICAL - State: %i (Fatal error)" % state
-            sys.exit(2)
+            message="State: %i (Fatal error)" % state
         elif state == 0:
-            print "WARNING - State: %i (Starting up, phase1)" % state
-            sys.exit(1)
+            message="State: %i (Starting up, phase1)" % state
         elif state == 3:
-            print "WARNING - State: %i (Recovering)" % state
-            sys.exit(1)
+            message="State: %i (Recovering)" % state
         elif state == 5:
-            print "WARNING - State: %i (Starting up, phase2)" % state
-            sys.exit(1)
+            message="State: %i (Starting up, phase2)" % state
         elif state == 1:
-            print "OK - State: %i (Primary)" % state
-            sys.exit(0)
+            message="State: %i (Primary)" % state
         elif state == 2:
-            print "OK - State: %i (Secondary)" % state
-            sys.exit(0)
+            message="State: %i (Secondary)" % state
         elif state == 7:
-            print "OK - State: %i (Arbiter)" % state
-            sys.exit(0)
+            message="State: %i (Arbiter)" % state
+        elif state==-1:
+            message="Not running with replSet"
         else:
-            print "CRITICAL - State: %i (Unknown state)" % state
-            sys.exit(2)
-
+            message="State: %i (Unknown state)" % state
+        message+=performance_data(perf_data,[(state,"state")])
+        check_levels(state,warning,critical,message,ok)
     except Exception, e:
         exit_with_general_critical(e)
 
-def check_databases(con, warning, critical):
+def check_databases(con, warning, critical,perf_data=None):
     try:
         try:
             set_read_preference(con.admin)
@@ -449,21 +490,13 @@ def check_databases(con, warning, critical):
             data = con.admin.command(son.SON([('listDatabases', 1)]))
 
         count = len(data['databases'])
-
-        if count >= critical:
-            print "CRITICAL - Number of DBs: %.0f" % count
-            sys.exit(2)
-        elif count >= warning:
-            print "WARNING - Number of DBs: %.0f" % count
-            sys.exit(1)
-        else:
-            print "OK - Number of DBs: %.0f" % count
-            sys.exit(0)
-
+        message="Number of DBs: %.0f" % count
+        message+=performance_data(perf_data,[(count,"databases",warning,critical,message)])
+        check_levels(count,warning,critical,message)
     except Exception, e:
         exit_with_general_critical(e)
 
-def check_collections(con, warning, critical):
+def check_collections(con, warning, critical,perf_data=None):
     try:
         try:
             set_read_preference(con.admin)
@@ -476,19 +509,39 @@ def check_collections(con, warning, critical):
             dbname = db['name']
             count += len(con[dbname].collection_names())
 
-        if count >= critical:
-            print "CRITICAL - Number of collections: %.0f" % count
-            sys.exit(2)
-        elif count >= warning:
-            print "WARNING - Number of collections: %.0f" % count
-            sys.exit(1)
-        else:
-            print "OK - Number of collections: %.0f" % count
-            sys.exit(0)
+        message="Number of collections: %.0f" % count
+        message+=performance_data(perf_data,[(count,"collections",warning,critical,message)])
+        check_levels(count,warning,critical,message)
 
     except Exception, e:
         exit_with_general_critical(e)
 
+
+def check_all_databases_size(con, warning, critical, perf_data):
+    warning = warning or 100
+    critical = critical or 1000
+
+    try: 
+        set_read_preference(con.admin)
+        all_dbs_data = con.admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
+    except:
+        all_dbs_data = con.admin.command(son.SON([('listDatabases', 1)]))
+    
+    total_storage_size=0
+    message=""
+    perf_data_param=[()]
+    for db in all_dbs_data['databases']:
+        database = db['name']
+        data = con[database].command('dbstats') 
+        storage_size = data['storageSize'] / 1024 / 1024
+        message+="; Database %s size: %.0f MB"%(database,storage_size)
+        perf_data_param.append((storage_size,database+"_database_size"))
+        total_storage_size+=storage_size
+    
+    perf_data_param[0]=(total_storage_size,"total_size",warning,critical)
+    message+=performance_data(perf_data,perf_data_param)
+    message="Total size: %.0f MB" % total_storage_size + message
+    check_levels(total_storage_size,warning,critical,message)
 
 def check_database_size(con, database, warning, critical, perf_data):
     warning = warning or 100
@@ -514,7 +567,28 @@ def check_database_size(con, database, warning, critical, perf_data):
     except Exception, e:
         exit_with_general_critical(e)
 
+def check_queues(con, warning, critical, perf_data):
+    warning = warning or 10
+    critical = critical or 30
+    try:
+        try:
+            set_read_preference(con.admin)
+            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
+        except:
+            data = con.admin.command(son.SON([('serverStatus', 1)]))
 
+        #lock_percentage = float(data['globalLock']['lockTime']) / float(data['globalLock']['totalTime']) * 100
+        total_queues = float(data['globalLock']['currentQueue']['total']) 
+        readers_queues = float(data['globalLock']['currentQueue']['readers']) 
+        writers_queues = float(data['globalLock']['currentQueue']['writers']) 
+        message = "Current queue is : total = %d, readers = %d, writers = %d" % (total_queues, readers_queues, writers_queues)
+        message+=performance_data(perf_data,[(total_queues, "total_queues",warning,critical),(readers_queues, "readers_queues"),(writers_queues,"writers_queues")])
+        check_levels(total_queues,warning,critical,message)
+
+    except Exception, e:
+        exit_with_general_critical(e)
+
+    
 #
 # main app
 #
