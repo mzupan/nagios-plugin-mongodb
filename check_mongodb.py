@@ -116,8 +116,10 @@ def main(argv):
     p.add_option('--mapped-memory',action='store_true',dest='mapped_memory',default=False,help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
     p.add_option('-d', '--database', action='store', dest='database', default='admin', help='Specify the database to check')
+    p.add_option('-c', '--collection', action='store', dest='collection', default='admin', help='Specify the collection to check')
     p.add_option('--all-databases', action='store_true', dest='all_databases', default=False, help='Check all databases (action database_size)')
     p.add_option('-s', '--ssl', dest='ssl', default=False, action='callback', callback=optional_arg(True), help='Connect using SSL')
+    p.add_option('-T', '--time', action='store', type='int', dest='sample_time', default=1, help='Time used to sample number of pages faults')
     options, arguments = p.parse_args()
 
     host = options.host
@@ -130,7 +132,9 @@ def main(argv):
     perf_data = options.perf_data
     max_lag = options.max_lag
     database = options.database
+    collection = options.collection
     ssl = options.ssl
+    sample_time = options.sample_time
     #
     # moving the login up here and passing in the connection
     #
@@ -648,59 +652,29 @@ def chunks_balance(con, database, collection, warning, critical):
         for shard in shards:
             delta = abs(avgchunksnb - col.find({"ns":nsfilter,"shard":shard}).count())
             message = "Namespace: %s, Shard name: %s, Chunk delta: %i" % (nsfilter,shard,delta)
-            
-def chunks_balance(con, database, collection, warning, critical):
-    warning = warning or 10
-    critical = critical or 20
-    nsfilter = database+"."+collection
-    try:
-        try:
-            set_read_preference(con.admin)
-            col = con.config.chunks
-            nscount = col.find({"ns":nsfilter}).count()
-            shards = col.distinct("shard")
-            
-        except:
-            print "WARNING - Can't get chunks infos from MongoDB"
+
+            if delta >= criticalnb and delta > 0 :
+                print "CRITICAL - Chunks not well balanced " + message
+                sys.exit(2)
+            elif delta >= warningnb  and delta > 0 :
+                print "WARNING - Chunks not well balanced  " + message
+                sys.exit(1)
+
+        print "OK - Chunks well balanced across shards"
+        sys.exit(0)
+
+    except Exception, e:
+        exit_with_general_critical(e)    
+        if delta >= criticalnb and delta > 0 :
+            print "CRITICAL - Chunks not well balanced " + message
+            sys.exit(2)
+        elif delta >= warningnb  and delta > 0 :
+            print "WARNING - Chunks not well balanced  " + message
             sys.exit(1)
 
-        if nscount == 0 :
-            print "WARNING - Namespace %s is not sharded" % (nsfilter)
-            sys.exit(1)            
-            
-        avgchunksnb = nscount/len(shards)
-        warningnb = avgchunksnb * warning / 100
-        criticalnb = avgchunksnb * critical / 100 
+    print "OK - Chunks well balanced across shards"
+    sys.exit(0)
 
-        for shard in shards:
-            delta = abs(avgchunksnb - col.find({"ns":nsfilter,"shard":shard}).count())
-            message = "Namespace: %s, Shard name: %s, Chunk delta: %i" % (nsfilter,shard,delta)
-        
-            if delta >= criticalnb and delta > 0 :
-                print "CRITICAL - Chunks not well balanced " + message
-                sys.exit(2)
-            elif delta >= warningnb  and delta > 0 :
-                print "WARNING - Chunks not well balanced  " + message
-                sys.exit(1)
-        
-        print "OK - Chunks well balanced across shards"
-        sys.exit(0)
-
-    except Exception, e:
-        exit_with_general_critical(e)    
-            if delta >= criticalnb and delta > 0 :
-                print "CRITICAL - Chunks not well balanced " + message
-                sys.exit(2)
-            elif delta >= warningnb  and delta > 0 :
-                print "WARNING - Chunks not well balanced  " + message
-                sys.exit(1)
-        
-        print "OK - Chunks well balanced across shards"
-        sys.exit(0)
-
-    except Exception, e:
-        exit_with_general_critical(e)    
-        
 #
 # main app
 #
