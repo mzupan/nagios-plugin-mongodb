@@ -186,7 +186,7 @@ def main(argv):
             check_all_databases_size(con,warning, critical, perf_data)
         else:
             check_database_size(con, database, warning, critical, perf_data)
-	elif action == "page_faults":
+    elif action == "page_faults":
         check_page_faults(con, sample_time, warning, critical, perf_data)
     elif action == "chunks_balance":
         chunks_balance(con, database, collection, warning, critical)
@@ -608,16 +608,16 @@ def check_page_faults(con, sample_time, warning, critical, perf_data):
             data2 = con.admin.command(son.SON([('serverStatus', 1)]))
 
         try:
-		    #on linux servers only
+            #on linux servers only
             page_faults = (int(data2['extra_info']['page_faults']) - int(data1['extra_info']['page_faults']))/sample_time
         except KeyError:
-			print "WARNING - Can't get extra_info.page_faults counter from MongoDB"
-			sys.exit(1)
+            print "WARNING - Can't get extra_info.page_faults counter from MongoDB"
+            sys.exit(1)
 
         message = "Page Faults: %i" % (page_faults)
 
-		message+=performance_data(perf_data,[(page_faults, "page_faults",warning,critical)])
-		check_levels(page_faults, warning, critical, message)
+        message+=performance_data(perf_data,[(page_faults, "page_faults",warning,critical)])
+        check_levels(page_faults, warning, critical, message)
 
     except Exception, e:
         exit_with_general_critical(e)
@@ -632,15 +632,15 @@ def chunks_balance(con, database, collection, warning, critical):
             col = con.config.chunks
             nscount = col.find({"ns":nsfilter}).count()
             shards = col.distinct("shard")
-			
+            
         except:
-			print "WARNING - Can't get chunks infos from MongoDB"
-			sys.exit(1)
+            print "WARNING - Can't get chunks infos from MongoDB"
+            sys.exit(1)
 
         if nscount == 0 :
             print "WARNING - Namespace %s is not sharded" % (nsfilter)
-            sys.exit(1)			
-			
+            sys.exit(1)            
+            
         avgchunksnb = nscount/len(shards)
         warningnb = avgchunksnb * warning / 100
         criticalnb = avgchunksnb * critical / 100 
@@ -648,7 +648,7 @@ def chunks_balance(con, database, collection, warning, critical):
         for shard in shards:
             delta = abs(avgchunksnb - col.find({"ns":nsfilter,"shard":shard}).count())
             message = "Namespace: %s, Shard name: %s, Chunk delta: %i" % (nsfilter,shard,delta)
-			
+            
 def chunks_balance(con, database, collection, warning, critical):
     warning = warning or 10
     critical = critical or 20
@@ -659,15 +659,15 @@ def chunks_balance(con, database, collection, warning, critical):
             col = con.config.chunks
             nscount = col.find({"ns":nsfilter}).count()
             shards = col.distinct("shard")
-			
+            
         except:
-			print "WARNING - Can't get chunks infos from MongoDB"
-			sys.exit(1)
+            print "WARNING - Can't get chunks infos from MongoDB"
+            sys.exit(1)
 
         if nscount == 0 :
             print "WARNING - Namespace %s is not sharded" % (nsfilter)
-            sys.exit(1)			
-			
+            sys.exit(1)            
+            
         avgchunksnb = nscount/len(shards)
         warningnb = avgchunksnb * warning / 100
         criticalnb = avgchunksnb * critical / 100 
@@ -675,7 +675,7 @@ def chunks_balance(con, database, collection, warning, critical):
         for shard in shards:
             delta = abs(avgchunksnb - col.find({"ns":nsfilter,"shard":shard}).count())
             message = "Namespace: %s, Shard name: %s, Chunk delta: %i" % (nsfilter,shard,delta)
-		
+        
             if delta >= criticalnb and delta > 0 :
                 print "CRITICAL - Chunks not well balanced " + message
                 sys.exit(2)
@@ -687,7 +687,7 @@ def chunks_balance(con, database, collection, warning, critical):
         sys.exit(0)
 
     except Exception, e:
-        exit_with_general_critical(e)	
+        exit_with_general_critical(e)    
             if delta >= criticalnb and delta > 0 :
                 print "CRITICAL - Chunks not well balanced " + message
                 sys.exit(2)
@@ -699,8 +699,8 @@ def chunks_balance(con, database, collection, warning, critical):
         sys.exit(0)
 
     except Exception, e:
-        exit_with_general_critical(e)	
-		
+        exit_with_general_critical(e)    
+        
 #
 # main app
 #
