@@ -665,12 +665,6 @@ def chunks_balance(con, database, collection, warning, critical):
 
     except Exception, e:
         exit_with_general_critical(e)    
-        if delta >= criticalnb and delta > 0 :
-            print "CRITICAL - Chunks not well balanced " + message
-            sys.exit(2)
-        elif delta >= warningnb  and delta > 0 :
-            print "WARNING - Chunks not well balanced  " + message
-            sys.exit(1)
 
     print "OK - Chunks well balanced across shards"
     sys.exit(0)
