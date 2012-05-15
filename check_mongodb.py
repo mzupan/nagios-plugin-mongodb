@@ -111,7 +111,7 @@ def main(argv):
     p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold we want to set')
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
-                          'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog'])
+                          'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog','journal_commits_in_wl'])
     p.add_option('--max-lag',action='store_true',dest='max_lag',default=False,help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory',action='store_true',dest='mapped_memory',default=False,help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -182,6 +182,8 @@ def main(argv):
         check_collections(con, warning, critical,perf_data)
     elif action == "oplog":
         check_oplog(con, warning, critical,perf_data)
+    elif action == "journal_commits_in_wl":
+        check_journal_commits_in_wl(con, warning, critical,perf_data)
     elif action == "database_size":
         if options.all_databases:
             check_all_databases_size(con,warning, critical, perf_data)
@@ -634,6 +636,29 @@ def check_oplog(con, warning, critical, perf_data):
 
     except Exception, e:
         exit_with_general_critical(e)
+
+def check_journal_commits_in_wl(con, warning, critical,perf_data):
+    """  Checking the number of commits which occurred in the db's write lock. 
+Most commits are performed outside of this lock; committed while in the write lock is undesirable. 
+Under very high write situations it is normal for this value to be nonzero.  """
+
+    warning = warning or 10
+    critical = critical or 40
+    try:
+        try:
+            set_read_preference(con.admin)
+            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
+        except:
+            data = con.admin.command(son.SON([('serverStatus', 1)]))
+
+        j_commits_in_wl = data['dur']['commitsInWriteLock'] 
+        message="Journal commits in DB write lock : %d" % j_commits_in_wl
+        message+=performance_data(perf_data,[(j_commits_in_wl,"j_commits_in_wl",warning, critical)])
+        check_levels(j_commits_in_wl,warning, critical, message)
+
+    except Exception, e:
+        exit_with_general_critical(e)
+
     
 #
 # main app
