@@ -106,6 +106,7 @@ def get_server_status(con):
     except:
         data = con.admin.command(son.SON([('serverStatus', 1)]))
     return data
+
 def main(argv):
     p = optparse.OptionParser(conflict_handler="resolve", description= "This Nagios plugin checks the health of mongodb.")
 
@@ -222,11 +223,7 @@ def check_connections(con, warning, critical, perf_data):
     warning = warning or 80
     critical = critical or 95
     try:
-        try:
-            set_read_preference(con.admin)
-            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1), ('repl', 1)]))
-        except:
-            data = con.admin.command(son.SON([('serverStatus', 1), ('repl', 1)]))
+        data=get_server_status(con)
 
         current = float(data['connections']['current'])
         available = float(data['connections']['available'])
@@ -319,17 +316,10 @@ def check_memory(con, warning, critical, perf_data,mapped_memory):
     warning = warning or 8
     critical = critical or 16
     try:
-        try:
-            set_read_preference(con.admin)
-            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
-        except:
-            data = con.admin.command(son.SON([('serverStatus', 1)]))
-
-
+        data=get_server_status(con)
         if not data['mem']['supported'] and not mapped_memory:
             print "OK - Platform not supported for memory info"
             return 0
-       
         #
         # convert to gigs
         #
@@ -373,12 +363,7 @@ def check_lock(con, warning, critical, perf_data):
     warning = warning or 10
     critical = critical or 30
     try:
-        try:
-            set_read_preference(con.admin)
-            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
-        except:
-            data = con.admin.command(son.SON([('serverStatus', 1)]))
-
+        data=get_server_status(con)
         #
         # calculate percentage
         #
@@ -398,12 +383,7 @@ def check_flushing(con, warning, critical, avg, perf_data):
     warning = warning or 5000
     critical = critical or 15000
     try:
-        try:
-            set_read_preference(con.admin)
-            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
-        except:
-            data = con.admin.command(son.SON([('serverStatus', 1)]))
-
+        data=get_server_status(con)
         if avg:
             flush_time = float(data['backgroundFlushing']['average_ms'])
             stat_type = "Average"
@@ -423,11 +403,7 @@ def index_miss_ratio(con, warning, critical, perf_data):
     warning = warning or 10
     critical = critical or 30
     try:
-        try:
-            set_read_preference(con.admin)
-            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
-        except:
-            data = con.admin.command(son.SON([('serverStatus', 1)]))
+        data=get_server_status(con)
 
         try:
             miss_ratio = float(data['indexCounters']['btree']['missRatio'])
@@ -580,11 +556,7 @@ def check_queues(con, warning, critical, perf_data):
     warning = warning or 10
     critical = critical or 30
     try:
-        try:
-            set_read_preference(con.admin)
-            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
-        except:
-            data = con.admin.command(son.SON([('serverStatus', 1)]))
+        data=get_server_status(con)
 
         total_queues = float(data['globalLock']['currentQueue']['total']) 
         readers_queues = float(data['globalLock']['currentQueue']['readers']) 
