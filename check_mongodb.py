@@ -153,9 +153,8 @@ def main(argv):
             # This means: Arbiter is reachable and can answer requests/votes - this is all we need to know from an arbiter
             print "OK - State: 7 (Arbiter)"
             sys.exit(0)
+        exit_with_general_critical(e)            
 
-        print e
-        sys.exit(2)
     conn_time = time.time() - start
     conn_time = round(conn_time, 0)
 
