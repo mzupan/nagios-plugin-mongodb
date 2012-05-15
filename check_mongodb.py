@@ -99,7 +99,13 @@ def check_levels(param, warning, critical,message,ok=[]):
         print "CRITICAL - Unexpected value : %d" % param + "; " + message
         sys.exit(2)
 
-
+def get_server_status(con):
+    try:
+        set_read_preference(con.admin)
+        data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
+    except:
+        data = con.admin.command(son.SON([('serverStatus', 1)]))
+    return data
 def main(argv):
     p = optparse.OptionParser(conflict_handler="resolve", description= "This Nagios plugin checks the health of mongodb.")
 
@@ -645,11 +651,7 @@ Under very high write situations it is normal for this value to be nonzero.  """
     warning = warning or 10
     critical = critical or 40
     try:
-        try:
-            set_read_preference(con.admin)
-            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
-        except:
-            data = con.admin.command(son.SON([('serverStatus', 1)]))
+        data=get_server_status(con)
 
         j_commits_in_wl = data['dur']['commitsInWriteLock'] 
         message="Journal commits in DB write lock : %d" % j_commits_in_wl
