@@ -118,7 +118,8 @@ def main(argv):
     p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold we want to set')
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
-                          'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog','journal_commits_in_wl'])
+                          'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog','journal_commits_in_wl',
+                          'write_data_files','journaled'])
     p.add_option('--max-lag',action='store_true',dest='max_lag',default=False,help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory',action='store_true',dest='mapped_memory',default=False,help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -180,6 +181,10 @@ def main(argv):
             return check_all_databases_size(con,warning, critical, perf_data)
         else:
             return check_database_size(con, database, warning, critical, perf_data)
+    elif action == "journaled":
+        return check_journaled(con, warning, critical,perf_data)
+    elif action == "write_data_files":
+        return check_write_to_datafiles(con, warning, critical,perf_data)
     else:
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
@@ -634,7 +639,38 @@ Under very high write situations it is normal for this value to be nonzero.  """
 
     except Exception, e:
         return exit_with_general_critical(e)
-    
+
+def check_journaled(con, warning, critical,perf_data):
+    """ Checking the average amount of data in megabytes written to the recovery log in the last four seconds"""
+
+    warning = warning or 20
+    critical = critical or 40
+    try:
+        data=get_server_status(con)
+        journaled = data['dur']['journaledMB'] 
+        message="Journaled : %.2f MB" % journaled
+        message+=performance_data(perf_data,[("%.2f"%journaled,"journaled",warning, critical)])
+        return check_levels(journaled,warning, critical, message)
+
+    except Exception, e:
+        return exit_with_general_critical(e)
+
+def check_write_to_datafiles(con, warning, critical,perf_data):
+    """    Checking the average amount of data in megabytes written to the databases datafiles in the last four seconds. 
+As these writes are already journaled, they can occur lazily, and thus the number indicated here may be lower 
+than the amount physically written to disk."""
+    warning = warning or 20
+    critical = critical or 40
+    try:
+        data=get_server_status(con)
+        writes = data['dur']['writeToDataFilesMB'] 
+        message="Write to data files : %.2f MB" % writes
+        message+=performance_data(perf_data,[("%.2f" % writes,"write_to_data_files",warning, critical)])
+        return check_levels(writes,warning, critical, message)
+
+    except Exception, e:
+        return exit_with_general_critical(e)
+
 #
 # main app
 #
