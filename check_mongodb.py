@@ -142,25 +142,9 @@ def main(argv):
     # moving the login up here and passing in the connection
     #
     start = time.time()
-    try:
-        #
-        # ssl connection for pymongo > 2.1
-        # 
-        if pymongo.version >= "2.1":
-            con = pymongo.Connection(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl)
-        else:
-            con = pymongo.Connection(host, port, slave_okay=True)
-
-        if user and passwd:
-            db = con["admin"]
-            db.authenticate(user, passwd)
-    except Exception, e:
-        if isinstance(e,pymongo.errors.AutoReconnect) and str(e).find(" is an arbiter") != -1:
-            # We got a pymongo AutoReconnect exception that tells us we connected to an Arbiter Server
-            # This means: Arbiter is reachable and can answer requests/votes - this is all we need to know from an arbiter
-            print "OK - State: 7 (Arbiter)"
-            return 0
-        return exit_with_general_critical(e)            
+    err,con=mongo_connect(host, port,ssl, user,passwd)
+    if err!=0:
+        return err;
 
     conn_time = time.time() - start
     conn_time = round(conn_time, 0)
@@ -198,6 +182,26 @@ def main(argv):
             return check_database_size(con, database, warning, critical, perf_data)
     else:
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
+
+def mongo_connect(host=None, port=None,ssl=False, user=None,passwd=None):
+    try:
+        # ssl connection for pymongo > 2.1
+        if pymongo.version >= "2.1":
+            con = pymongo.Connection(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl)
+        else:
+            con = pymongo.Connection(host, port, slave_okay=True)
+
+        if user and passwd:
+            db = con["admin"]
+            db.authenticate(user, passwd)
+    except Exception, e:
+        if isinstance(e,pymongo.errors.AutoReconnect) and str(e).find(" is an arbiter") != -1:
+            # We got a pymongo AutoReconnect exception that tells us we connected to an Arbiter Server
+            # This means: Arbiter is reachable and can answer requests/votes - this is all we need to know from an arbiter
+            print "OK - State: 7 (Arbiter)"
+            return 0,0
+        return exit_with_general_critical(e),None
+    return 0,con
 
 def exit_with_general_critical(e):
     if isinstance(e, SystemExit):
