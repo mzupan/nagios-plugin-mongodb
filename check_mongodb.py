@@ -75,30 +75,37 @@ def check_levels(param, warning, critical,message,ok=[]):
     if (numeric_type(critical) and numeric_type(warning)):
         if param >= critical:
             print "CRITICAL - " + message
-            sys.exit(2)
+            return 2
         elif param >= warning:
             print "WARNING - " + message
-            sys.exit(1)
+            return 1
         else:
             print "OK - " + message
-            sys.exit(0)
+            return 0
     else:
         if param in critical:
             print "CRITICAL - " + message
-            sys.exit(2)
+            return 2
 
         if param in warning:
             print "WARNING - " + message
-            sys.exit(1)
+            return 1
 
         if param in ok:
             print "OK - " + message
-            sys.exit(0)
+            return 0
 
         # unexpected param value
         print "CRITICAL - Unexpected value : %d" % param + "; " + message
-        sys.exit(2)
+        return 2
 
+def get_server_status(con):
+    try:
+        set_read_preference(con.admin)
+        data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
+    except:
+        data = con.admin.command(son.SON([('serverStatus', 1)]))
+    return data
 
 def main(argv):
     p = optparse.OptionParser(conflict_handler="resolve", description= "This Nagios plugin checks the health of mongodb.")
@@ -111,7 +118,8 @@ def main(argv):
     p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold we want to set')
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
-                          'index_miss_ratio', 'databases', 'collections', 'database_size','queues'])
+                          'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog','journal_commits_in_wl',
+                          'write_data_files','journaled'])
     p.add_option('--max-lag',action='store_true',dest='max_lag',default=False,help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory',action='store_true',dest='mapped_memory',default=False,help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -135,10 +143,54 @@ def main(argv):
     # moving the login up here and passing in the connection
     #
     start = time.time()
+    err,con=mongo_connect(host, port,ssl, user,passwd)
+    if err!=0:
+        return err;
+
+    conn_time = time.time() - start
+    conn_time = round(conn_time, 0)
+
+    if action == "connections":
+        return check_connections(con, warning, critical, perf_data)
+    elif action == "replication_lag":
+        return check_rep_lag(con,  warning, critical, perf_data,max_lag)
+    elif action == "replset_state":
+        return check_replset_state(con,perf_data, warning , critical )
+    elif action == "memory":
+        return check_memory(con, warning, critical, perf_data,options.mapped_memory)
+    elif action == "queues":
+        return check_queues(con, warning, critical, perf_data)
+    elif action == "lock":
+        return check_lock(con, warning, critical, perf_data)
+    elif action == "flushing":
+        return check_flushing(con, warning, critical, True, perf_data)
+    elif action == "last_flush_time":
+        return check_flushing(con, warning, critical, False, perf_data)
+    elif action == "index_miss_ratio":
+        index_miss_ratio(con, warning, critical, perf_data)
+    elif action == "databases":
+        return check_databases(con, warning, critical,perf_data)
+    elif action == "collections":
+        return check_collections(con, warning, critical,perf_data)
+    elif action == "oplog":
+        return check_oplog(con, warning, critical,perf_data)
+    elif action == "journal_commits_in_wl":
+        return check_journal_commits_in_wl(con, warning, critical,perf_data)
+    elif action == "database_size":
+        if options.all_databases:
+            return check_all_databases_size(con,warning, critical, perf_data)
+        else:
+            return check_database_size(con, database, warning, critical, perf_data)
+    elif action == "journaled":
+        return check_journaled(con, warning, critical,perf_data)
+    elif action == "write_data_files":
+        return check_write_to_datafiles(con, warning, critical,perf_data)
+    else:
+        return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
+
+def mongo_connect(host=None, port=None,ssl=False, user=None,passwd=None):
     try:
-        #
         # ssl connection for pymongo > 2.1
-        # 
         if pymongo.version >= "2.1":
             con = pymongo.Connection(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl)
         else:
@@ -152,49 +204,16 @@ def main(argv):
             # We got a pymongo AutoReconnect exception that tells us we connected to an Arbiter Server
             # This means: Arbiter is reachable and can answer requests/votes - this is all we need to know from an arbiter
             print "OK - State: 7 (Arbiter)"
-            sys.exit(0)
-
-        print e
-        sys.exit(2)
-    conn_time = time.time() - start
-    conn_time = round(conn_time, 0)
-
-    if action == "connections":
-        check_connections(con, warning, critical, perf_data)
-    elif action == "replication_lag":
-        check_rep_lag(con,  warning, critical, perf_data,max_lag)
-    elif action == "replset_state":
-        check_replset_state(con,perf_data, warning , critical )
-    elif action == "memory":
-        check_memory(con, warning, critical, perf_data,options.mapped_memory)
-    elif action == "queues":
-        check_queues(con, warning, critical, perf_data)
-    elif action == "lock":
-        check_lock(con, warning, critical, perf_data)
-    elif action == "flushing":
-        check_flushing(con, warning, critical, True, perf_data)
-    elif action == "last_flush_time":
-        check_flushing(con, warning, critical, False, perf_data)
-    elif action == "index_miss_ratio":
-        index_miss_ratio(con, warning, critical, perf_data)
-    elif action == "databases":
-        check_databases(con, warning, critical,perf_data)
-    elif action == "collections":
-        check_collections(con, warning, critical,perf_data)
-    elif action == "database_size":
-        if options.all_databases:
-            check_all_databases_size(con,warning, critical, perf_data)
-        else:
-            check_database_size(con, database, warning, critical, perf_data)
-    else:
-        check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
+            return 0,0
+        return exit_with_general_critical(e),None
+    return 0,con
 
 def exit_with_general_critical(e):
     if isinstance(e, SystemExit):
-        sys.exit(e)
+        return e
     else:
         print "CRITICAL - General MongoDB Error:", e
-        sys.exit(2)
+    return 2    
 
 def set_read_preference(db):
     if pymongo.version >= "2.1":
@@ -206,18 +225,14 @@ def check_connect(host, port, warning, critical, perf_data, user, passwd, conn_t
     message = "Connection took %i seconds" % conn_time
     message += performance_data(perf_data,[(conn_time,"connection_time",warning,critical)])
 
-    check_levels(conn_time,warning,critical,message)
+    return check_levels(conn_time,warning,critical,message)
 
 
 def check_connections(con, warning, critical, perf_data):
     warning = warning or 80
     critical = critical or 95
     try:
-        try:
-            set_read_preference(con.admin)
-            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1), ('repl', 1)]))
-        except:
-            data = con.admin.command(son.SON([('serverStatus', 1), ('repl', 1)]))
+        data=get_server_status(con)
 
         current = float(data['connections']['current'])
         available = float(data['connections']['available'])
@@ -227,10 +242,10 @@ def check_connections(con, warning, critical, perf_data):
         message += performance_data(perf_data,[(used_percent,"used_percent",warning, critical),
                 (current,"current_connections"),
                 (available,"available_connections")])
-        check_levels(used_percent,warning,critical,message)
+        return check_levels(used_percent,warning,critical,message)
 
     except Exception, e:
-        exit_with_general_critical(e)
+        return exit_with_general_critical(e)
 
 
 def check_rep_lag(con,  warning, critical, perf_data,max_lag):
@@ -266,19 +281,19 @@ def check_rep_lag(con,  warning, critical, perf_data,max_lag):
         # Check if we're in the middle of an election and don't have a primary
         if primary_node is None:
             print "WARNING - No primary defined. In an election?"
-            sys.exit(1)
+            return 1
 
         # Check if we failed to find the current host
         # below should never happen
         if host_node is None:
             print "CRITICAL - Unable to find host '" + host + "' in replica set."
-            sys.exit(2)
+            return 2
 
         # Is the specified host the primary?
         if host_node["stateStr"] == "PRIMARY":
             if max_lag==False:
                 print "OK - This is the primary."
-                sys.exit(0)
+                return 0
             else:
                 #get the maximal replication lag 
                 data=""
@@ -290,18 +305,18 @@ def check_rep_lag(con,  warning, critical, perf_data,max_lag):
                     maximal_lag = max(maximal_lag, replicationLag)
                 message = "Maximal lag is "+str( maximal_lag) + " seconds"
                 message +=performance_data(perf_data,[(maximal_lag,"replication_lag",warning, critical)])
-                check_levels(maximal_lag,warning,critical,message) 
+                return check_levels(maximal_lag,warning,critical,message) 
 
         # Find the difference in optime between current node and PRIMARY
         optime_lag = abs(primary_node["optimeDate"] - host_node["optimeDate"])
         lag = optime_lag.seconds
         message = "Lag is "+ str(lag) + " seconds"
         message +=performance_data(perf_data,[(lag,"replication_lag",warning, critical)])
-        check_levels(lag,warning+slaveDelays[host_node['name']],critical+slaveDelays[host_node['name']],message)
+        return check_levels(lag,warning+slaveDelays[host_node['name']],critical+slaveDelays[host_node['name']],message)
 
     except Exception, e:
         print e
-        exit_with_general_critical(e)
+        return exit_with_general_critical(e)
 
 def check_memory(con, warning, critical, perf_data,mapped_memory):
     #
@@ -310,17 +325,10 @@ def check_memory(con, warning, critical, perf_data,mapped_memory):
     warning = warning or 8
     critical = critical or 16
     try:
-        try:
-            set_read_preference(con.admin)
-            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
-        except:
-            data = con.admin.command(son.SON([('serverStatus', 1)]))
-
-
+        data=get_server_status(con)
         if not data['mem']['supported'] and not mapped_memory:
             print "OK - Platform not supported for memory info"
-            sys.exit(0)
-       
+            return 0
         #
         # convert to gigs
         #
@@ -352,34 +360,29 @@ def check_memory(con, warning, critical, perf_data,mapped_memory):
                     ("%.2f" % mem_mapped,"memory_mapped"),("%.2f" % mem_virtual,"memory_virtual"),("%.2f" %mem_mapped_journal,"mappedWithJournal")])
         #added for unsupported systems like Solaris
         if mapped_memory and mem_resident==0: 
-            check_levels(mem_mapped,warning,critical,message) 
+            return check_levels(mem_mapped,warning,critical,message) 
         else:
-            check_levels(mem_resident,warning,critical,message)
+            return check_levels(mem_resident,warning,critical,message)
 
     except Exception, e:
-        exit_with_general_critical(e)
+        return exit_with_general_critical(e)
 
 
 def check_lock(con, warning, critical, perf_data):
     warning = warning or 10
     critical = critical or 30
     try:
-        try:
-            set_read_preference(con.admin)
-            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
-        except:
-            data = con.admin.command(son.SON([('serverStatus', 1)]))
-
+        data=get_server_status(con)
         #
         # calculate percentage
         #
         lock_percentage = float(data['globalLock']['lockTime']) / float(data['globalLock']['totalTime']) * 100
         message = "Lock Percentage: %.2f%%" % lock_percentage
         message+=performance_data(perf_data,[("%.2f" % lock_percentage,"lock_percentage",warning,critical)])
-        check_levels(lock_percentage,warning,critical,message)
+        return check_levels(lock_percentage,warning,critical,message)
 
     except Exception, e:
-        exit_with_general_critical(e)
+        return exit_with_general_critical(e)
 
 def check_flushing(con, warning, critical, avg, perf_data):
     #
@@ -389,12 +392,7 @@ def check_flushing(con, warning, critical, avg, perf_data):
     warning = warning or 5000
     critical = critical or 15000
     try:
-        try:
-            set_read_preference(con.admin)
-            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
-        except:
-            data = con.admin.command(son.SON([('serverStatus', 1)]))
-
+        data=get_server_status(con)
         if avg:
             flush_time = float(data['backgroundFlushing']['average_ms'])
             stat_type = "Average"
@@ -405,20 +403,16 @@ def check_flushing(con, warning, critical, avg, perf_data):
         message = "%s Flush Time: %.2fms" % (stat_type, flush_time)
         message+=performance_data(perf_data,[("%.2fms" %flush_time,"%s_flush_time" % stat_type.lower(),warning,critical)])
 
-        check_levels(flush_time,warning,critical,message)
+        return check_levels(flush_time,warning,critical,message)
 
     except Exception, e:
-        exit_with_general_critical(e)
+        return exit_with_general_critical(e)
 
 def index_miss_ratio(con, warning, critical, perf_data):
     warning = warning or 10
     critical = critical or 30
     try:
-        try:
-            set_read_preference(con.admin)
-            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
-        except:
-            data = con.admin.command(son.SON([('serverStatus', 1)]))
+        data=get_server_status(con)
 
         try:
             miss_ratio = float(data['indexCounters']['btree']['missRatio'])
@@ -426,18 +420,18 @@ def index_miss_ratio(con, warning, critical, perf_data):
             not_supported_msg = "not supported on this platform"
             if data['indexCounters']['note'] == not_supported_msg:
                 print "OK - MongoDB says: " + not_supported_msg
-                sys.exit(0)
+                return 0
             else:
                 print "WARNING - Can't get counter from MongoDB"
-                sys.exit(1)
+                return 1
 
         message = "Miss Ratio: %.2f" % miss_ratio
         message+=performance_data(perf_data,[("%.2f" % miss_ratio,"index_miss_ratio" ,warning,critical)])
 
-        check_levels(miss_ratio,warning,critical,message)
+        return check_levels(miss_ratio,warning,critical,message)
 
     except Exception, e:
-        exit_with_general_critical(e)
+        return exit_with_general_critical(e)
 
 
 def check_replset_state(con,perf_data,warning="",critical=""):
@@ -477,9 +471,9 @@ def check_replset_state(con,perf_data,warning="",critical=""):
         else:
             message="State: %i (Unknown state)" % state
         message+=performance_data(perf_data,[(state,"state")])
-        check_levels(state,warning,critical,message,ok)
+        return check_levels(state,warning,critical,message,ok)
     except Exception, e:
-        exit_with_general_critical(e)
+        return exit_with_general_critical(e)
 
 def check_databases(con, warning, critical,perf_data=None):
     try:
@@ -492,9 +486,9 @@ def check_databases(con, warning, critical,perf_data=None):
         count = len(data['databases'])
         message="Number of DBs: %.0f" % count
         message+=performance_data(perf_data,[(count,"databases",warning,critical,message)])
-        check_levels(count,warning,critical,message)
+        return check_levels(count,warning,critical,message)
     except Exception, e:
-        exit_with_general_critical(e)
+        return exit_with_general_critical(e)
 
 def check_collections(con, warning, critical,perf_data=None):
     try:
@@ -511,10 +505,10 @@ def check_collections(con, warning, critical,perf_data=None):
 
         message="Number of collections: %.0f" % count
         message+=performance_data(perf_data,[(count,"collections",warning,critical,message)])
-        check_levels(count,warning,critical,message)
+        return check_levels(count,warning,critical,message)
 
     except Exception, e:
-        exit_with_general_critical(e)
+        return exit_with_general_critical(e)
 
 
 def check_all_databases_size(con, warning, critical, perf_data):
@@ -541,7 +535,7 @@ def check_all_databases_size(con, warning, critical, perf_data):
     perf_data_param[0]=(total_storage_size,"total_size",warning,critical)
     message+=performance_data(perf_data,perf_data_param)
     message="Total size: %.0f MB" % total_storage_size + message
-    check_levels(total_storage_size,warning,critical,message)
+    return check_levels(total_storage_size,warning,critical,message)
 
 def check_database_size(con, database, warning, critical, perf_data):
     warning = warning or 100
@@ -557,41 +551,129 @@ def check_database_size(con, database, warning, critical, perf_data):
 
         if storage_size >= critical:
             print "CRITICAL - Database size: %.0f MB, Database: %s%s" % (storage_size, database, perfdata)
-            sys.exit(2)
+            return 2
         elif storage_size >= warning:
             print "WARNING - Database size: %.0f MB, Database: %s%s" % (storage_size, database, perfdata)
-            sys.exit(1)
+            return 1
         else:
             print "OK - Database size: %.0f MB, Database: %s%s" % (storage_size, database, perfdata)
-            sys.exit(0)
+            return 0
     except Exception, e:
-        exit_with_general_critical(e)
+        return exit_with_general_critical(e)
 
 def check_queues(con, warning, critical, perf_data):
     warning = warning or 10
     critical = critical or 30
     try:
-        try:
-            set_read_preference(con.admin)
-            data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
-        except:
-            data = con.admin.command(son.SON([('serverStatus', 1)]))
+        data=get_server_status(con)
 
-        #lock_percentage = float(data['globalLock']['lockTime']) / float(data['globalLock']['totalTime']) * 100
         total_queues = float(data['globalLock']['currentQueue']['total']) 
         readers_queues = float(data['globalLock']['currentQueue']['readers']) 
         writers_queues = float(data['globalLock']['currentQueue']['writers']) 
         message = "Current queue is : total = %d, readers = %d, writers = %d" % (total_queues, readers_queues, writers_queues)
         message+=performance_data(perf_data,[(total_queues, "total_queues",warning,critical),(readers_queues, "readers_queues"),(writers_queues,"writers_queues")])
-        check_levels(total_queues,warning,critical,message)
+        return check_levels(total_queues,warning,critical,message)
 
     except Exception, e:
-        exit_with_general_critical(e)
+        return exit_with_general_critical(e)
 
-    
+def check_oplog(con, warning, critical, perf_data):
+    """ Checking the oplog time - the time of the log currntly saved in the oplog collection
+    defaults:
+        critical 4 hours
+        warning 24 hours 
+    those can be changed as usual with -C and -W parameters"""
+    warning = warning or 24 
+    critical = critical or 4
+    try:
+        db = con.local
+        ol=db.system.namespaces.find_one({"name":"local.oplog.rs"}) 
+        if (db.system.namespaces.find_one({"name":"local.oplog.rs"}) != None) :
+            oplog = "oplog.rs";
+        else :
+            ol=db.system.namespaces.find_one({"name":"local.oplog.$main"})
+            if (db.system.namespaces.find_one({"name":"local.oplog.$main"}) != None) :
+                oplog = "oplog.$main";
+            else :
+                message = "neither master/slave nor replica set replication detected";
+                return check_levels(None,warning,critical,message)
+
+        try:
+                set_read_preference(con.admin)
+                data=con.local.command(pymongo.son_manipulator.SON([('collstats',oplog)]))
+        except:
+                data = con.admin.command(son.SON([('collstats',oplog)]))
+
+        ol_size=data['size']
+        ol_storage_size=data['storageSize']
+        ol_used_storage=int(float(ol_size)/ol_storage_size*100+1)
+        ol=con.local[oplog]
+        firstc = ol.find().sort("$natural",pymongo.ASCENDING).limit(1)[0]['ts']
+        lastc = ol.find().sort("$natural",pymongo.DESCENDING).limit(1)[0]['ts']
+        time_in_oplog= (lastc.as_datetime()-firstc.as_datetime())
+        message="Oplog saves "+ str(time_in_oplog) + " %d%% used" %ol_used_storage 
+        try: #work starting from python2.7
+            hours_in_oplog= time_in_oplog.total_seconds()/60/60
+        except:
+            hours_in_oplog= float(time_in_oplog.seconds + time_in_oplog.days * 24 * 3600)/60/60
+        approx_level=hours_in_oplog*100/ol_used_storage
+        message+=performance_data(perf_data,[("%.2f" % hours_in_oplog,'oplog_time',warning,critical),("%.2f " % approx_level, 'oplog_time_100_percent_used')])
+        return check_levels(-approx_level,-warning,-critical,message)
+
+    except Exception, e:
+        return exit_with_general_critical(e)
+
+def check_journal_commits_in_wl(con, warning, critical,perf_data):
+    """  Checking the number of commits which occurred in the db's write lock. 
+Most commits are performed outside of this lock; committed while in the write lock is undesirable. 
+Under very high write situations it is normal for this value to be nonzero.  """
+
+    warning = warning or 10
+    critical = critical or 40
+    try:
+        data=get_server_status(con)
+        j_commits_in_wl = data['dur']['commitsInWriteLock'] 
+        message="Journal commits in DB write lock : %d" % j_commits_in_wl
+        message+=performance_data(perf_data,[(j_commits_in_wl,"j_commits_in_wl",warning, critical)])
+        return check_levels(j_commits_in_wl,warning, critical, message)
+
+    except Exception, e:
+        return exit_with_general_critical(e)
+
+def check_journaled(con, warning, critical,perf_data):
+    """ Checking the average amount of data in megabytes written to the recovery log in the last four seconds"""
+
+    warning = warning or 20
+    critical = critical or 40
+    try:
+        data=get_server_status(con)
+        journaled = data['dur']['journaledMB'] 
+        message="Journaled : %.2f MB" % journaled
+        message+=performance_data(perf_data,[("%.2f"%journaled,"journaled",warning, critical)])
+        return check_levels(journaled,warning, critical, message)
+
+    except Exception, e:
+        return exit_with_general_critical(e)
+
+def check_write_to_datafiles(con, warning, critical,perf_data):
+    """    Checking the average amount of data in megabytes written to the databases datafiles in the last four seconds. 
+As these writes are already journaled, they can occur lazily, and thus the number indicated here may be lower 
+than the amount physically written to disk."""
+    warning = warning or 20
+    critical = critical or 40
+    try:
+        data=get_server_status(con)
+        writes = data['dur']['writeToDataFilesMB'] 
+        message="Write to data files : %.2f MB" % writes
+        message+=performance_data(perf_data,[("%.2f" % writes,"write_to_data_files",warning, critical)])
+        return check_levels(writes,warning, critical, message)
+
+    except Exception, e:
+        return exit_with_general_critical(e)
+
 #
 # main app
 #
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    sys.exit(main(sys.argv[1:]))
 
