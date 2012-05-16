@@ -606,10 +606,9 @@ def check_oplog(con, warning, critical, perf_data):
         try: #work starting from python2.7
             hours_in_oplog= time_in_oplog.total_seconds()/60/60
         except:
-            hours_in_oplog=(time_in_oplog.microseconds + 
-                        (time_in_oplog.seconds + time_in_oplog.days * 24 * 3600) * 10**6) / 10**6
+            hours_in_oplog= float(time_in_oplog.seconds + time_in_oplog.days * 24 * 3600)/60/60
         approx_level=hours_in_oplog*100/ol_used_storage
-        message+=performance_data(perf_data,[("%.2f " % hours_in_oplog,'oplog_time',warning,critical),("%.2f " % approx_level, 'oplog_time_100_percent_used')])
+        message+=performance_data(perf_data,[("%.2f" % hours_in_oplog,'oplog_time',warning,critical),("%.2f " % approx_level, 'oplog_time_100_percent_used')])
         return check_levels(-approx_level,-warning,-critical,message)
 
     except Exception, e:
