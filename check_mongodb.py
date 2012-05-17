@@ -26,6 +26,8 @@ import sys
 import time
 import optparse
 import textwrap
+import re
+import os
 
 try:
     import pymongo
@@ -119,7 +121,7 @@ def main(argv):
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
                           'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog','journal_commits_in_wl',
-                          'write_data_files','journaled'])
+                          'write_data_files','journaled','opcounters'])
     p.add_option('--max-lag',action='store_true',dest='max_lag',default=False,help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory',action='store_true',dest='mapped_memory',default=False,help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -185,6 +187,8 @@ def main(argv):
         return check_journaled(con, warning, critical,perf_data)
     elif action == "write_data_files":
         return check_write_to_datafiles(con, warning, critical,perf_data)
+    elif action == "opcounters":
+        return check_opcounters(con,host, warning, critical,perf_data)
     else:
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
@@ -671,6 +675,103 @@ than the amount physically written to disk."""
     except Exception, e:
         return exit_with_general_critical(e)
 
+
+def get_opcounters(data,opcounters_name,host):
+    try : 
+        insert=data[opcounters_name]['insert']
+        query=data[opcounters_name]['query']
+        update=data[opcounters_name]['update']
+        delete=data[opcounters_name]['delete']
+        getmore=data[opcounters_name]['getmore']
+        command=data[opcounters_name]['command']
+    except KeyError,e:
+        return 0, [0]*100
+    total_commands=insert+query+update+delete+getmore+command
+    new_vals= [total_commands,insert,query,update,delete,getmore,command]
+    return  maintain_delta(new_vals, host,opcounters_name)
+def check_opcounters(con, host, warning, critical,perf_data):
+    """ A function to get all opcounters delta per minute. In case of a replication - gets the opcounters+opcountersRepl"""
+    warning=warning or 10000
+    critical=critical or 15000
+
+    data=get_server_status(con)
+    err1,delta_opcounters=get_opcounters(data,'opcounters',host) 
+    err2,delta_opcounters_repl=get_opcounters(data,'opcountersRepl',host)
+    if err1==0 and err2==0:
+        delta=[(x+y) for x,y in zip(delta_opcounters ,delta_opcounters_repl) ]
+        delta[0]=delta_opcounters[0]#only the time delta shouldn't be summarized
+        per_minute_delta=[int(x/delta[0]*60) for x in delta[1:]]
+        message="Test succeeded , old values missing"
+        message= "Opcounters: total=%d,insert=%d,query=%d,update=%d,delete=%d,getmore=%d,command=%d" % tuple(per_minute_delta)
+        message+=performance_data(perf_data,([(per_minute_delta[0],"total",warning,critical),(per_minute_delta[1],"insert"),
+                    (per_minute_delta[2],"query"), (per_minute_delta[3],"update"),(per_minute_delta[5],"delete"),
+                    (per_minute_delta[5],"getmore"),(per_minute_delta[6],"command")]))
+        return check_levels(per_minute_delta[0],warning,critical,message)
+    else :
+        return exit_with_general_critical("problem reading data from temp file")
+def build_file_name(host, action):
+    #done this way so it will work when run independently and from shell
+    module_name=re.match('(.*//*)*(.*)\..*',__file__).group(2)
+    return "/tmp/"+module_name+"_data/"+host+"-"+action+".data"
+
+def ensure_dir(f):
+    d = os.path.dirname(f) 
+    if not os.path.exists(d):
+        os.makedirs(d)
+    
+def write_values(file_name,string):
+    f=None
+    try:
+        f = open(file_name, 'w')
+    except IOError,e:
+        #try creating 
+        if (e.errno==2):
+            ensure_dir(file_name)
+            f = open(file_name, 'w')
+        else:
+            raise IOError(e); 
+    f.write(string)
+    f.close()
+    return 0
+    
+def read_values(file_name):
+    data=None
+    try:
+        f = open(file_name, 'r')
+        data= f.read()
+        f.close()
+        return 0,data
+    except IOError,e:
+        if (e.errno==2):
+            #no previous data
+            return 1,''
+    except Exception, e:
+        return 2,None
+
+def calc_delta(old,new):
+    delta=[]
+    if (len(old)!=len(new)):
+        raise Exception("unequal number of parameters")
+    for i in range(0,len(old)):
+       val=float(new[i])-float(old[i])
+       if val<0:
+            val=new[i]      
+       delta.append(val) 
+    return 0, delta
+
+def maintain_delta(new_vals,host,action):
+    file_name=build_file_name(host,action)
+    err,data=read_values(file_name)
+    old_vals=data.split(';')
+    new_vals=[str(int(time.time()))]+new_vals
+    delta=None
+    try:
+        err,delta= calc_delta(old_vals,new_vals)
+    except:
+        err=2
+    write_res=write_values(file_name,";".join(str(x) for x in new_vals))
+    return err+write_res,delta
+     
 #
 # main app
 #
