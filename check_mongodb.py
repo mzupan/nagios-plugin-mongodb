@@ -121,7 +121,7 @@ def main(argv):
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
                           'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog','journal_commits_in_wl',
-                          'write_data_files','journaled','opcounters'])
+                          'write_data_files','journaled','opcounters','current_lock'])
     p.add_option('--max-lag',action='store_true',dest='max_lag',default=False,help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory',action='store_true',dest='mapped_memory',default=False,help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -169,6 +169,8 @@ def main(argv):
         return check_queues(con, warning, critical, perf_data)
     elif action == "lock":
         return check_lock(con, warning, critical, perf_data)
+    elif action == "current_lock":
+        return check_current_lock(con, host,warning, critical, perf_data)
     elif action == "flushing":
         return check_flushing(con, warning, critical, True, perf_data)
     elif action == "last_flush_time":
@@ -701,6 +703,7 @@ def get_opcounters(data,opcounters_name,host):
     total_commands=insert+query+update+delete+getmore+command
     new_vals= [total_commands,insert,query,update,delete,getmore,command]
     return  maintain_delta(new_vals, host,opcounters_name)
+
 def check_opcounters(con, host, warning, critical,perf_data):
     """ A function to get all opcounters delta per minute. In case of a replication - gets the opcounters+opcountersRepl"""
     warning=warning or 10000
@@ -721,6 +724,26 @@ def check_opcounters(con, host, warning, critical,perf_data):
         return check_levels(per_minute_delta[0],warning,critical,message)
     else :
         return exit_with_general_critical("problem reading data from temp file")
+
+def check_current_lock(con, host, warning, critical,perf_data):
+    """ A function to get  current lock percentage and not a global one, as check_lock function does"""
+    warning = warning or 10
+    critical = critical or 30
+    data=get_server_status(con)
+
+    lockTime=float(data['globalLock']['lockTime']) 
+    totalTime=float(data['globalLock']['totalTime']) 
+
+    err,delta=maintain_delta([totalTime,lockTime],host,"locktime") 
+    if err==0: 
+        lock_percentage = delta[2]/delta[1]*100     #lockTime/totalTime*100
+        message = "Current Lock Percentage: %.2f%%" % lock_percentage
+        message+=performance_data(perf_data,[("%.2f" % lock_percentage,"current_lock_percentage",warning,critical)])
+        return check_levels(lock_percentage,warning,critical,message)
+    else :
+        return exit_with_general_critical("problem reading data from temp file")
+     
+
 def build_file_name(host, action):
     #done this way so it will work when run independently and from shell
     module_name=re.match('(.*//*)*(.*)\..*',__file__).group(2)
