@@ -134,8 +134,13 @@ def main(argv):
     port = options.port
     user = options.user
     passwd = options.passwd
-    warning = float(options.warning) if (options.warning and options.action!='replset_state') else options.warning 
-    critical = float(options.critical) if (options.critical and options.action!='replset_state') else options.critical
+    if (options.action=='replset_state'):
+        warning = str(options.warning or "")
+        critical = str(options.critical or "")
+    else:
+        warning = float(options.warning or 0) 
+        critical = float(options.critical or 0) 
+        
     action = options.action
     perf_data = options.perf_data
     max_lag = options.max_lag
@@ -439,8 +444,15 @@ def index_miss_ratio(con, warning, critical, perf_data):
 
 
 def check_replset_state(con,perf_data,warning="",critical=""):
-    warning = [int(x) for x in warning.split(",")] if warning else [0,3,5]
-    critical= [int(x) for x in critical.split(",") ] if critical else [8,4,-1]
+    try:
+        warning = [int(x) for x in warning.split(",")] 
+    except :
+        warning = [0,3,5]
+    try:
+        critical= [int(x) for x in critical.split(",") ] 
+    except :
+        critical=[8,4,-1]
+        
     ok = range(-1,8) #should include the range of all posiible values
     try:
         try:
@@ -451,7 +463,7 @@ def check_replset_state(con,perf_data,warning="",critical=""):
                 data = con.admin.command(son.SON([('replSetGetStatus', 1)]))
             state = int(data['myState'])
         except pymongo.errors.OperationFailure,e :
-            if e.code==None and e.message.find('failed: not running with --replSet"'):
+            if e.code==None and str(e).find('failed: not running with --replSet"'):
                 state=-1
 
         if state == 8:
