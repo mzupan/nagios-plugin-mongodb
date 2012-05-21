@@ -37,6 +37,12 @@ define command {
     command_name    check_mongodb_database
     command_line    $USER1$/nagios-plugin-mongodb/check_mongodb.py -H $HOSTADDRESS$ -A $ARG1$ -P $ARG2$ -W $ARG3$ -C $ARG4$ -d $ARG5$
 }
+
+
+define command {
+    command_name    check_mongodb_replicaset
+    command_line    $USER1$/nagios-plugin-mongodb/check_mongodb.py -H $HOSTADDRESS$ -A $ARG1$ -P $ARG2$ -W $ARG3$ -C $ARG4$ -r $ARG5$
+}
 </code></pre>
 
 Then you can reference it like the following. This is is my services.cfg
@@ -188,5 +194,19 @@ define service {
       hostgroup_name          Mongo Servers
       service_description     MongoDB Database size your-database
       check_command           check_mongodb_database!database_size!27017!300!500!your-database
+}
+</code></pre>
+
+
+
+#### Check the primary server of replicaset
+This will check the primary server of a replicaset. This is useful for catching unexpected stepdowns of the replica's primary server.
+Replace your-replicaset with the name of your replicaset
+<pre><code>
+define service {
+      use                     generic-service
+      hostgroup_name          Mongo Servers
+      service_description     MongoDB Database size your-database
+      check_command           check_mongodb_replicaset!database_size!27017!300!500!your-replicaset
 }
 </code></pre>
