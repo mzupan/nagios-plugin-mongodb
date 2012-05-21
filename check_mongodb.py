@@ -121,13 +121,14 @@ def main(argv):
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
                           'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog','journal_commits_in_wl',
-                          'write_data_files','journaled','opcounters'])
+                          'write_data_files','journaled','opcounters','replica_primary'])
     p.add_option('--max-lag',action='store_true',dest='max_lag',default=False,help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory',action='store_true',dest='mapped_memory',default=False,help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
     p.add_option('-d', '--database', action='store', dest='database', default='admin', help='Specify the database to check')
     p.add_option('--all-databases', action='store_true', dest='all_databases', default=False, help='Check all databases (action database_size)')
     p.add_option('-s', '--ssl', dest='ssl', default=False, action='callback', callback=optional_arg(True), help='Connect using SSL')
+    p.add_option('-r', '--replicaset', dest='replicaset', default=None, action='callback', callback=optional_arg(True), help='Connect to replicaset')
     options, arguments = p.parse_args()
 
     host = options.host
@@ -146,11 +147,17 @@ def main(argv):
     max_lag = options.max_lag
     database = options.database
     ssl = options.ssl
+    replicaset=options.replicaset
+
+    if action == 'replica_primary' and replicaset is None:
+        return "replicaset must be passed in when using replica_primary check"
+        
+
     #
     # moving the login up here and passing in the connection
     #
     start = time.time()
-    err,con=mongo_connect(host, port,ssl, user,passwd)
+    err,con=mongo_connect(host, port,ssl, user,passwd, replicaset)
     if err!=0:
         return err;
 
@@ -194,16 +201,24 @@ def main(argv):
         return check_write_to_datafiles(con, warning, critical,perf_data)
     elif action == "opcounters":
         return check_opcounters(con,host, warning, critical,perf_data)
+    elif action == "replica_primary":
+        return check_replica_primary(con,host, warning, critical,perf_data)
     else:
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
-def mongo_connect(host=None, port=None,ssl=False, user=None,passwd=None):
+def mongo_connect(host=None, port=None,ssl=False, user=None,passwd=None,replica=None):
     try:
         # ssl connection for pymongo > 2.1
         if pymongo.version >= "2.1":
-            con = pymongo.Connection(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl)
+            if replica is None:
+                con = pymongo.Connection(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl)
+            else:
+                con = pymongo.Connection(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl, replicaSet=replica)
         else:
-            con = pymongo.Connection(host, port, slave_okay=True)
+            if replica is None:
+                con = pymongo.Connection(host, port, slave_okay=True)
+            else:
+                con = pymongo.Connection(host, port, slave_okay=True, replicaSet=replica)
 
         if user and passwd:
             db = con["admin"]
@@ -721,6 +736,43 @@ def check_opcounters(con, host, warning, critical,perf_data):
         return check_levels(per_minute_delta[0],warning,critical,message)
     else :
         return exit_with_general_critical("problem reading data from temp file")
+
+
+def get_stored_primary_server_name(db):
+    """ get the stored primary server name from db. """
+    if "last_primary_server" in db.collection_names():
+        stored_primary_server = db.last_primary_server.find_one()["server"]
+    else:
+        stored_primary_server = None
+
+    return stored_primary_server
+
+
+def check_replica_primary(con,host, warning, critical,perf_data):
+    """ A function to check if the primary server of a replica set has changed """
+    if warning is None and critical is None:
+        warning=1
+    warning=warning or 2
+    critical=critical or 2
+
+    primary_status=0
+    message="Primary server has not changed"
+    db=con["nagios"]
+    data=get_server_status(con)
+    current_primary=data['repl'].get('primary')
+    saved_primary=get_stored_primary_server_name(db)
+    if current_primary is None:
+        current_primary = "None"
+    if saved_primary is None:
+        saved_primary = "None"
+    if current_primary != saved_primary:
+        last_primary_server_record = {"server": current_primary}
+        db.last_primary_server.update({"server": {"$exists": True}}, last_primary_server_record, safe=True)
+        message = "Primary server has changed from %s to %s" % (saved_primary, current_primary)
+        primary_status=1
+    check_levels(primary_status,warning,critical,message)
+
+
 def build_file_name(host, action):
     #done this way so it will work when run independently and from shell
     module_name=re.match('(.*//*)*(.*)\..*',__file__).group(2)
