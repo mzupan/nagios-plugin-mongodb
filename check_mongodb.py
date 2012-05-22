@@ -121,7 +121,7 @@ def main(argv):
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
                           'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog','journal_commits_in_wl',
-                          'write_data_files','journaled','opcounters','current_lock'])
+                          'write_data_files','journaled','opcounters','current_lock','page_faults'])
     p.add_option('--max-lag',action='store_true',dest='max_lag',default=False,help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory',action='store_true',dest='mapped_memory',default=False,help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -196,6 +196,8 @@ def main(argv):
         return check_write_to_datafiles(con, warning, critical,perf_data)
     elif action == "opcounters":
         return check_opcounters(con,host, warning, critical,perf_data)
+    elif action == "page_faults":
+        return check_page_faults(con,host, warning, critical,perf_data)
     else:
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
@@ -726,7 +728,7 @@ def check_opcounters(con, host, warning, critical,perf_data):
         return exit_with_general_critical("problem reading data from temp file")
 
 def check_current_lock(con, host, warning, critical,perf_data):
-    """ A function to get  current lock percentage and not a global one, as check_lock function does"""
+    """ A function to get current lock percentage and not a global one, as check_lock function does"""
     warning = warning or 10
     critical = critical or 30
     data=get_server_status(con)
@@ -742,8 +744,30 @@ def check_current_lock(con, host, warning, critical,perf_data):
         return check_levels(lock_percentage,warning,critical,message)
     else :
         return exit_with_general_critical("problem reading data from temp file")
-     
 
+def check_page_faults(con, host, warning, critical,perf_data):
+    """ A function to get page_faults per second from the system"""
+    warning = warning or 10
+    critical = critical or 30
+    data=get_server_status(con)
+
+    try:
+        page_faults=float(data['extra_info']['page_faults']) 
+    except:
+        # page_faults unsupported on the underlaying system
+        return exit_with_general_critical("page_faults unsupported on the underlaying system")
+    
+    err,delta=maintain_delta([page_faults],host,"page_faults")
+    if err==0:
+        page_faults_ps=delta[1]/delta[0]
+        message = "Page faults : %.2f ps" % page_faults_ps
+        message+=performance_data(perf_data,[("%.2f" %page_faults_ps,"page_faults_ps",warning,critical)])
+        return check_levels(page_faults_ps,warning,critical,message)
+    else:
+        return exit_with_general_critical("problem reading data from temp file")
+    
+
+     
 def build_file_name(host, action):
     #done this way so it will work when run independently and from shell
     module_name=re.match('(.*//*)*(.*)\..*',__file__).group(2)
