@@ -206,7 +206,7 @@ Replace your-replicaset with the name of your replicaset
 define service {
       use                     generic-service
       hostgroup_name          Mongo Servers
-      service_description     MongoDB Database size your-database
-      check_command           check_mongodb_replicaset!database_size!27017!300!500!your-replicaset
+      service_description     MongoDB Replicaset Master Monitor: your-replicaset
+      check_command           check_mongodb_replicaset!replica_primary!27017!0!1!your-replicaset
 }
 </code></pre>
