@@ -121,7 +121,7 @@ def main(argv):
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
                           'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog','journal_commits_in_wl',
-                          'write_data_files','journaled','opcounters','replica_primary'])
+                          'write_data_files','journaled','opcounters','replica_primary', 'faults'])
     p.add_option('--max-lag',action='store_true',dest='max_lag',default=False,help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory',action='store_true',dest='mapped_memory',default=False,help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -203,6 +203,8 @@ def main(argv):
         return check_opcounters(con,host, warning, critical,perf_data)
     elif action == "replica_primary":
         return check_replica_primary(con,host, warning, critical,perf_data)
+    elif action == "faults":
+        return faults(con,host, warning, critical,perf_data)
     else:
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
@@ -453,6 +455,29 @@ def index_miss_ratio(con, warning, critical, perf_data):
         message+=performance_data(perf_data,[("%.2f" % miss_ratio,"index_miss_ratio" ,warning,critical)])
 
         return check_levels(miss_ratio,warning,critical,message)
+
+    except Exception, e:
+        return exit_with_general_critical(e)
+
+def faults(con, host, warning, critical, perf_data):
+    warning = warning or 20
+    critical = critical or 50
+    secs = 5
+    try:
+        faults1 = float(get_server_status(con)['extra_info']['page_faults'])
+        time.sleep(secs)
+        faults2 = float(get_server_status(con)['extra_info']['page_faults'])
+
+        faults_per_sec = (faults2 - faults1) / secs
+
+        message = "Faults/sec: %.2f" % faults_per_sec
+        message+=performance_data(perf_data,[("%.2f" % faults_per_sec,"faults" ,warning,critical)])
+
+        return check_levels(faults_per_sec,warning,critical,message)
+
+    except KeyError:
+        print "WARNING - Can't get counter from MongoDB"
+        return 1
 
     except Exception, e:
         return exit_with_general_critical(e)
