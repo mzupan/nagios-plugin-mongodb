@@ -121,7 +121,7 @@ def main(argv):
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
                           'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog','journal_commits_in_wl',
-                          'write_data_files','journaled','opcounters','replica_primary'])
+                          'write_data_files','journaled','opcounters','current_lock','replica_primary','page_faults','asserts'])
     p.add_option('--max-lag',action='store_true',dest='max_lag',default=False,help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory',action='store_true',dest='mapped_memory',default=False,help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -176,6 +176,8 @@ def main(argv):
         return check_queues(con, warning, critical, perf_data)
     elif action == "lock":
         return check_lock(con, warning, critical, perf_data)
+    elif action == "current_lock":
+        return check_current_lock(con, host,warning, critical, perf_data)
     elif action == "flushing":
         return check_flushing(con, warning, critical, True, perf_data)
     elif action == "last_flush_time":
@@ -201,6 +203,10 @@ def main(argv):
         return check_write_to_datafiles(con, warning, critical,perf_data)
     elif action == "opcounters":
         return check_opcounters(con,host, warning, critical,perf_data)
+    elif action == "page_faults":
+        return check_page_faults(con,host, warning, critical,perf_data)
+    elif action == "asserts":
+        return check_asserts(con,host, warning, critical,perf_data)
     elif action == "replica_primary":
         return check_replica_primary(con,host, warning, critical,perf_data)
     else:
@@ -231,6 +237,13 @@ def mongo_connect(host=None, port=None,ssl=False, user=None,passwd=None,replica=
             return 0,0
         return exit_with_general_critical(e),None
     return 0,con
+
+def exit_with_general_warning(e):
+    if isinstance(e, SystemExit):
+        return e
+    else:
+        print "WARNING - General MongoDB warning:", e
+    return 1    
 
 def exit_with_general_critical(e):
     if isinstance(e, SystemExit):
@@ -716,6 +729,7 @@ def get_opcounters(data,opcounters_name,host):
     total_commands=insert+query+update+delete+getmore+command
     new_vals= [total_commands,insert,query,update,delete,getmore,command]
     return  maintain_delta(new_vals, host,opcounters_name)
+
 def check_opcounters(con, host, warning, critical,perf_data):
     """ A function to get all opcounters delta per minute. In case of a replication - gets the opcounters+opcountersRepl"""
     warning=warning or 10000
@@ -737,6 +751,84 @@ def check_opcounters(con, host, warning, critical,perf_data):
     else :
         return exit_with_general_critical("problem reading data from temp file")
 
+def check_current_lock(con, host, warning, critical,perf_data):
+    """ A function to get current lock percentage and not a global one, as check_lock function does"""
+    warning = warning or 10
+    critical = critical or 30
+    data=get_server_status(con)
+
+    lockTime=float(data['globalLock']['lockTime']) 
+    totalTime=float(data['globalLock']['totalTime']) 
+
+    err,delta=maintain_delta([totalTime,lockTime],host,"locktime") 
+    if err==0: 
+        lock_percentage = delta[2]/delta[1]*100     #lockTime/totalTime*100
+        message = "Current Lock Percentage: %.2f%%" % lock_percentage
+        message+=performance_data(perf_data,[("%.2f" % lock_percentage,"current_lock_percentage",warning,critical)])
+        return check_levels(lock_percentage,warning,critical,message)
+    else :
+        return exit_with_general_warning("problem reading data from temp file")
+
+def check_page_faults(con, host, warning, critical,perf_data):
+    """ A function to get page_faults per second from the system"""
+    warning = warning or 10
+    critical = critical or 30
+    data=get_server_status(con)
+
+    try:
+        page_faults=float(data['extra_info']['page_faults']) 
+    except:
+        # page_faults unsupported on the underlaying system
+        return exit_with_general_critical("page_faults unsupported on the underlaying system")
+    
+    err,delta=maintain_delta([page_faults],host,"page_faults")
+    if err==0:
+        page_faults_ps=delta[1]/delta[0]
+        message = "Page faults : %.2f ps" % page_faults_ps
+        message+=performance_data(perf_data,[("%.2f" %page_faults_ps,"page_faults_ps",warning,critical)])
+        return check_levels(page_faults_ps,warning,critical,message)
+    else:
+        return exit_with_general_warning("problem reading data from temp file")
+    
+
+def check_asserts(con, host, warning, critical,perf_data):
+    """ A function to get asserts from the system"""
+    warning = warning or 1
+    critical = critical or 10 
+    data=get_server_status(con)
+
+    asserts=data['asserts']
+   
+    #{ "regular" : 0, "warning" : 6, "msg" : 0, "user" : 12, "rollovers" : 0 } 
+    regular=asserts['regular']
+    warning_asserts=asserts['warning']
+    msg=asserts['msg']
+    user=asserts['user']
+    rollovers=asserts['rollovers']
+
+    err,delta=maintain_delta([regular,warning_asserts,msg,user,rollovers],host,"asserts")
+    
+    if err==0:
+        if delta[5]!=0:
+            #the number of rollovers were increased
+            warning=-1 # no matter the metrics this situation should raise a warning
+            # if this is normal rollover - the warning will not appear again, but if there will be a lot of asserts 
+            # the warning will stay for a long period of time
+            # although this is not a usual situation
+        
+        regular_ps=delta[1]/delta[0]
+        warning_ps=delta[2]/delta[0]
+        msg_ps=delta[3]/delta[0]
+        user_ps=delta[4]/delta[0]
+        rollovers_ps=delta[5]/delta[0]
+        total_ps=regular_ps+warning_ps+msg_ps+user_ps
+        message = "Total asserts : %.2f ps" % total_ps 
+        message+=performance_data(perf_data,[(total_ps,"asserts_ps",warning,critical),(regular_ps,"regular"),
+                    (warning_ps,"warning"),(msg_ps,"msg"),(user_ps,"user")])
+        return check_levels(total_ps,warning,critical,message)
+    else:
+        return exit_with_general_warning("problem reading data from temp file")
+     
 
 def get_stored_primary_server_name(db):
     """ get the stored primary server name from db. """
