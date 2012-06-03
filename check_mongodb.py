@@ -558,7 +558,6 @@ def check_collections(con, warning, critical,perf_data=None):
 def check_all_databases_size(con, warning, critical, perf_data):
     warning = warning or 100
     critical = critical or 1000
-
     try: 
         set_read_preference(con.admin)
         all_dbs_data = con.admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
@@ -571,7 +570,7 @@ def check_all_databases_size(con, warning, critical, perf_data):
     for db in all_dbs_data['databases']:
         database = db['name']
         data = con[database].command('dbstats') 
-        storage_size = data['storageSize'] / 1024 / 1024
+        storage_size = round(data['storageSize'] / 1024 / 1024,1)
         message+="; Database %s size: %.0f MB"%(database,storage_size)
         perf_data_param.append((storage_size,database+"_database_size"))
         total_storage_size+=storage_size
