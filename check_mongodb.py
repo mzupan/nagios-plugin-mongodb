@@ -234,7 +234,7 @@ def mongo_connect(host=None, port=None,ssl=False, user=None,passwd=None,replica=
             # We got a pymongo AutoReconnect exception that tells us we connected to an Arbiter Server
             # This means: Arbiter is reachable and can answer requests/votes - this is all we need to know from an arbiter
             print "OK - State: 7 (Arbiter)"
-            return 0,0
+            sys.exit(0)
         return exit_with_general_critical(e),None
     return 0,con
 
