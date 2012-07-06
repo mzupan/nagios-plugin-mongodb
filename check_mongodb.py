@@ -342,7 +342,10 @@ def check_rep_lag(con,  warning, critical, perf_data,max_lag):
                     maximal_lag = max(maximal_lag, replicationLag)
                 message = "Maximal lag is "+str( maximal_lag) + " seconds"
                 message +=performance_data(perf_data,[(maximal_lag,"replication_lag",warning, critical)])
-                return check_levels(maximal_lag,warning,critical,message) 
+                return check_levels(maximal_lag,warning,critical,message)
+        elif host_node["stateStr"] == "ARBITER":
+            print "OK - This is an arbiter"
+            return 0
 
         # Find the difference in optime between current node and PRIMARY
         optime_lag = abs(primary_node["optimeDate"] - host_node["optimeDate"])
