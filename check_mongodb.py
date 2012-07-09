@@ -861,7 +861,7 @@ def check_replica_primary(con,host, warning, critical,perf_data):
         saved_primary = "None"
     if current_primary != saved_primary:
         last_primary_server_record = {"server": current_primary}
-        db.last_primary_server.update({"server": {"$exists": True}}, last_primary_server_record, safe=True)
+        db.last_primary_server.update({"_id": "last_primary"}, {"$set" : last_primary_server_record} , upsert=True, safe=True)
         message = "Primary server has changed from %s to %s" % (saved_primary, current_primary)
         primary_status=1
     return check_levels(primary_status,warning,critical,message)
