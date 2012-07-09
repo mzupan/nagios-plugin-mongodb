@@ -864,7 +864,7 @@ def check_replica_primary(con,host, warning, critical,perf_data):
         db.last_primary_server.update({"server": {"$exists": True}}, last_primary_server_record, safe=True)
         message = "Primary server has changed from %s to %s" % (saved_primary, current_primary)
         primary_status=1
-    check_levels(primary_status,warning,critical,message)
+    return check_levels(primary_status,warning,critical,message)
 
 
 def build_file_name(host, action):
