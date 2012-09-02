@@ -294,7 +294,13 @@ def check_rep_lag(con,  warning, critical, perf_data,max_lag):
         set_read_preference(con.admin)
 
         # Get replica set status
-        rs_status = con.admin.command("replSetGetStatus")
+        try:
+            rs_status = con.admin.command("replSetGetStatus")
+        except pymongo.errors.OperationFailure,e :
+            if e.code==None and str(e).find('failed: not running with --replSet"'):
+                print "OK - Not running with replSet"
+                return 0
+        
         rs_conf = con.local.system.replset.find_one()
         for member in rs_conf['members']:
             if member.get('slaveDelay') is not None:
