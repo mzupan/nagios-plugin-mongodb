@@ -228,5 +228,6 @@ define service {
       hostgroup_name          Mongo Servers
       service_description     MongoDB Updates per Second
       check_command           check_mongodb_query!queries_per_second!27017!200!150!update
+}
 </code></pre>
 
