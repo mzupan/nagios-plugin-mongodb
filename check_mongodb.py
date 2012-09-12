@@ -121,7 +121,8 @@ def main(argv):
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
                           'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog','journal_commits_in_wl',
-                          'write_data_files','journaled','opcounters','current_lock','replica_primary','page_faults','asserts', 'queries_per_second'])
+                          'write_data_files','journaled','opcounters','current_lock','replica_primary','page_faults','asserts', 'queries_per_second',
+                          'page_faults', 'chunks_balance'])
     p.add_option('--max-lag',action='store_true',dest='max_lag',default=False,help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory',action='store_true',dest='mapped_memory',default=False,help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -130,6 +131,9 @@ def main(argv):
     p.add_option('-s', '--ssl', dest='ssl', default=False, action='callback', callback=optional_arg(True), help='Connect using SSL')
     p.add_option('-r', '--replicaset', dest='replicaset', default=None, action='callback', callback=optional_arg(True), help='Connect to replicaset')
     p.add_option('-q', '--querytype', action='store', dest='query_type', default='query', help='The query type to check [query|insert|update|delete|getmore|command] from queries_per_second')
+    p.add_option('-c', '--collection', action='store', dest='collection', default='admin', help='Specify the collection to check')
+    p.add_option('-T', '--time', action='store', type='int', dest='sample_time', default=1, help='Time used to sample number of pages faults')
+
     options, arguments = p.parse_args()
 
     host = options.host
@@ -137,6 +141,8 @@ def main(argv):
     user = options.user
     passwd = options.passwd
     query_type = options.query_type
+    collection = options.collection
+    sample_time = options.sample_time
     if (options.action=='replset_state'):
         warning = str(options.warning or "")
         critical = str(options.critical or "")
@@ -213,6 +219,10 @@ def main(argv):
         return check_replica_primary(con,host, warning, critical,perf_data)
     elif action == "queries_per_second":
         return check_queries_per_second(con, query_type, warning, critical, perf_data)
+    elif action == "page_faults":
+        check_page_faults(con, sample_time, warning, critical, perf_data)
+    elif action == "chunks_balance":
+        chunks_balance(con, database, collection, warning, critical)
     else:
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
@@ -922,6 +932,77 @@ def check_replica_primary(con,host, warning, critical,perf_data):
         primary_status=1
     return check_levels(primary_status,warning,critical,message)
 
+def check_page_faults(con, sample_time, warning, critical, perf_data):
+    warning = warning or 10
+    critical = critical or 20
+    try:
+        try:
+            set_read_preference(con.admin)
+            data1 = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
+            time.sleep(sample_time)
+            data2 = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
+        except:
+            data1 = con.admin.command(son.SON([('serverStatus', 1)]))
+            time.sleep(sample_time)
+            data2 = con.admin.command(son.SON([('serverStatus', 1)]))
+
+        try:
+            #on linux servers only
+            page_faults = (int(data2['extra_info']['page_faults']) - int(data1['extra_info']['page_faults']))/sample_time
+        except KeyError:
+            print "WARNING - Can't get extra_info.page_faults counter from MongoDB"
+            sys.exit(1)
+
+        message = "Page Faults: %i" % (page_faults)
+
+        message+=performance_data(perf_data,[(page_faults, "page_faults",warning,critical)])
+        check_levels(page_faults, warning, critical, message)
+
+    except Exception, e:
+        exit_with_general_critical(e)
+
+def chunks_balance(con, database, collection, warning, critical):
+    warning = warning or 10
+    critical = critical or 20
+    nsfilter = database+"."+collection
+    try:
+        try:
+            set_read_preference(con.admin)
+            col = con.config.chunks
+            nscount = col.find({"ns":nsfilter}).count()
+            shards = col.distinct("shard")
+            
+        except:
+            print "WARNING - Can't get chunks infos from MongoDB"
+            sys.exit(1)
+
+        if nscount == 0 :
+            print "WARNING - Namespace %s is not sharded" % (nsfilter)
+            sys.exit(1)            
+            
+        avgchunksnb = nscount/len(shards)
+        warningnb = avgchunksnb * warning / 100
+        criticalnb = avgchunksnb * critical / 100 
+
+        for shard in shards:
+            delta = abs(avgchunksnb - col.find({"ns":nsfilter,"shard":shard}).count())
+            message = "Namespace: %s, Shard name: %s, Chunk delta: %i" % (nsfilter,shard,delta)
+
+            if delta >= criticalnb and delta > 0 :
+                print "CRITICAL - Chunks not well balanced " + message
+                sys.exit(2)
+            elif delta >= warningnb  and delta > 0 :
+                print "WARNING - Chunks not well balanced  " + message
+                sys.exit(1)
+
+        print "OK - Chunks well balanced across shards"
+        sys.exit(0)
+
+    except Exception, e:
+        exit_with_general_critical(e)    
+
+    print "OK - Chunks well balanced across shards"
+    sys.exit(0)
 
 def build_file_name(host, action):
     #done this way so it will work when run independently and from shell
