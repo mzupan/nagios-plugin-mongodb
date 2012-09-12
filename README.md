@@ -43,6 +43,11 @@ define command {
     command_name    check_mongodb_replicaset
     command_line    $USER1$/nagios-plugin-mongodb/check_mongodb.py -H $HOSTADDRESS$ -A $ARG1$ -P $ARG2$ -W $ARG3$ -C $ARG4$ -r $ARG5$
 }
+
+define command {
+    command_name    check_mongodb_query
+    command_line    $USER1$/nagios-plugin-mongodb/check_mongodb.py -H $HOSTADDRESS$ -A $ARG1$ -P $ARG2$ -W $ARG3$ -C $ARG4$ -q $ARG5$
+}
 </code></pre>
 
 Then you can reference it like the following. This is is my services.cfg
@@ -210,3 +215,19 @@ define service {
       check_command           check_mongodb_replicaset!replica_primary!27017!0!1!your-replicaset
 }
 </code></pre>
+
+
+#### Check the number of queries per second
+This will check the number of queries per second on a server. Since MongoDB gives us the number as a running counter, we store the last value in the local
+database in the nagios_check collection. The following types are accepted: query|insert|update|delete|getmore|command
+
+This command will check updates per second and alert if the count is over 200 and warn if over 150
+<pre><code>
+define service {
+      use                     generic-service
+      hostgroup_name          Mongo Servers
+      service_description     MongoDB Updates per Second
+      check_command           check_mongodb_query!queries_per_second!27017!200!150!update
+}
+</code></pre>
+
