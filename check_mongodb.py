@@ -121,7 +121,7 @@ def main(argv):
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
                           'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog','journal_commits_in_wl',
-                          'write_data_files','journaled','opcounters','current_lock','replica_primary','page_faults','asserts'])
+                          'write_data_files','journaled','opcounters','current_lock','replica_primary','page_faults','asserts', 'queries_per_second'])
     p.add_option('--max-lag',action='store_true',dest='max_lag',default=False,help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory',action='store_true',dest='mapped_memory',default=False,help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -129,12 +129,14 @@ def main(argv):
     p.add_option('--all-databases', action='store_true', dest='all_databases', default=False, help='Check all databases (action database_size)')
     p.add_option('-s', '--ssl', dest='ssl', default=False, action='callback', callback=optional_arg(True), help='Connect using SSL')
     p.add_option('-r', '--replicaset', dest='replicaset', default=None, action='callback', callback=optional_arg(True), help='Connect to replicaset')
+    p.add_option('-q', '--querytype', action='store', dest='query_type', default='query', help='The query type to check [query|insert|update|delete|getmore|command] from queries_per_second')
     options, arguments = p.parse_args()
 
     host = options.host
     port = options.port
     user = options.user
     passwd = options.passwd
+    query_type = options.query_type
     if (options.action=='replset_state'):
         warning = str(options.warning or "")
         critical = str(options.critical or "")
@@ -209,6 +211,8 @@ def main(argv):
         return check_asserts(con,host, warning, critical,perf_data)
     elif action == "replica_primary":
         return check_replica_primary(con,host, warning, critical,perf_data)
+    elif action == "queries_per_second":
+        return check_queries_per_second(con, query_type, warning, critical, perf_data)
     else:
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
@@ -625,6 +629,52 @@ def check_queues(con, warning, critical, perf_data):
         message = "Current queue is : total = %d, readers = %d, writers = %d" % (total_queues, readers_queues, writers_queues)
         message+=performance_data(perf_data,[(total_queues, "total_queues",warning,critical),(readers_queues, "readers_queues"),(writers_queues,"writers_queues")])
         return check_levels(total_queues,warning,critical,message)
+
+    except Exception, e:
+        return exit_with_general_critical(e)
+
+def check_queries_per_second(con, query_type, warning, critical, perf_data):
+    warning = warning or 250
+    critical = critical or 500
+
+    if query_type not in ['insert', 'query', 'update', 'delete', 'getmore', 'command']:
+        return exit_with_general_critical("The query type of '%s' is not valid" % query_type)
+
+    try:
+        db = con.local
+        data = get_server_status(con)
+
+        # grab the count
+        num = int(data['opcounters'][query_type]) 
+        
+        # do the math
+        last_count = db.nagios_check.find_one({'check': 'query_counts'})
+        try:
+            ts = int(time.time())
+            diff_query = num - last_count['data'][query_type]['count']
+            diff_ts = ts - last_count['data'][query_type]['ts']
+
+            query_per_sec = float(diff_query) / float(diff_ts)
+
+            # update the count now
+            db.nagios_check.update(last_count, {'$set': {"data.%s" % query_type : {'count': num, 'ts': int(time.time())}}})
+
+            message = "Queries / Sec: %f" % query_per_sec
+            message += performance_data(perf_data,[(query_per_sec,"%s_per_sec" % query_type,warning,critical,message)])
+        except KeyError:
+            #
+            # since it is the first run insert it
+            query_per_sec = 0
+            message = "First run of check.. no data"
+            db.nagios_check.update(last_count, {'$set': {"data.%s" % query_type : {'count': num, 'ts': int(time.time())}}})
+        except TypeError:
+            #
+            # since it is the first run insert it
+            query_per_sec = 0
+            message = "First run of check.. no data"
+            db.nagios_check.insert({'check': 'query_counts', 'data': {query_type: {'count': num, 'ts': int(time.time())}}})
+
+        return check_levels(query_per_sec,warning,critical,message)
 
     except Exception, e:
         return exit_with_general_critical(e)
