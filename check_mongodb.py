@@ -175,7 +175,7 @@ def main(argv):
     if action == "connections":
         return check_connections(con, warning, critical, perf_data)
     elif action == "replication_lag":
-        return check_rep_lag(con,  warning, critical, perf_data,max_lag)
+        return check_rep_lag(con, host, warning, critical, perf_data,max_lag)
     elif action == "replset_state":
         return check_replset_state(con,perf_data, warning , critical )
     elif action == "memory":
@@ -299,11 +299,11 @@ def check_connections(con, warning, critical, perf_data):
         return exit_with_general_critical(e)
 
 
-def check_rep_lag(con,  warning, critical, perf_data,max_lag):
+def check_rep_lag(con, host, warning, critical, perf_data,max_lag):
     warning = warning or 600
     critical = critical or 3600
     rs_status = {}
-    slaveDelays={}
+    slaveDelays = {}
     try:
         set_read_preference(con.admin)
 
@@ -311,71 +311,108 @@ def check_rep_lag(con,  warning, critical, perf_data,max_lag):
         try:
             rs_status = con.admin.command("replSetGetStatus")
         except pymongo.errors.OperationFailure,e :
-            if e.code==None and str(e).find('failed: not running with --replSet"'):
+            if e.code == None and str(e).find('failed: not running with --replSet"'):
                 print "OK - Not running with replSet"
                 return 0
         
-        rs_conf = con.local.system.replset.find_one()
-        for member in rs_conf['members']:
-            if member.get('slaveDelay') is not None:
-                slaveDelays[member['host']] = member.get('slaveDelay')
-            else:
-                slaveDelays[member['host']] = 0 
-        #print slaveDelays
-        # Find the primary and/or the current node
-        primary_node = None
-        host_node = None
-        
-        host_status=con.admin.command("ismaster", "1")
-        #print "Is master",host_status
-        for member in rs_status["members"]:
-            if member["stateStr"] == "PRIMARY":
-                primary_node = member
-            if member["name"]==host_status['me']:
-                host_node = member
-        #print host_node
 
-        # Check if we're in the middle of an election and don't have a primary
-        if primary_node is None:
-            print "WARNING - No primary defined. In an election?"
-            return 1
+        serverVersion = tuple(con.server_info()['version'].split('.'))
+        if serverVersion >= tuple("2.0.0".split(".")):
+            #
+            # check for version greater then 2.0
+            #
+            rs_conf = con.local.system.replset.find_one()
+            for member in rs_conf['members']:
+                if member.get('slaveDelay') is not None:
+                    slaveDelays[member['host']] = member.get('slaveDelay')
+                else:
+                    slaveDelays[member['host']] = 0 
 
-        # Check if we failed to find the current host
-        # below should never happen
-        if host_node is None:
-            print "CRITICAL - Unable to find host '" + host + "' in replica set."
-            return 2
+            # Find the primary and/or the current node
+            primary_node = None
+            host_node = None
+            
+            host_status = con.admin.command("ismaster", "1")
 
-        # Is the specified host the primary?
-        if host_node["stateStr"] == "PRIMARY":
-            if max_lag==False:
-                print "OK - This is the primary."
+            for member in rs_status["members"]:
+                if member["stateStr"] == "PRIMARY":
+                    primary_node = member
+                if member["name"] == host_status['me']:
+                    host_node = member
+
+            # Check if we're in the middle of an election and don't have a primary
+            if primary_node is None:
+                print "WARNING - No primary defined. In an election?"
+                return 1
+
+            # Check if we failed to find the current host
+            # below should never happen
+            if host_node is None:
+                print "CRITICAL - Unable to find host '" + host + "' in replica set."
+                return 2
+
+            # Is the specified host the primary?
+            if host_node["stateStr"] == "PRIMARY":
+                if max_lag==False:
+                    print "OK - This is the primary."
+                    return 0
+                else:
+                    #get the maximal replication lag 
+                    data = ""
+                    maximal_lag = 0
+                    for member in rs_status['members']:
+                        lastSlaveOpTime = member['optimeDate']
+                        replicationLag = abs(primary_node["optimeDate"] - lastSlaveOpTime).seconds - slaveDelays[member['name']]
+                        data = data + member['name'] + " lag=%d;" % replicationLag
+                        maximal_lag = max(maximal_lag, replicationLag)
+                    message = "Maximal lag is "+str( maximal_lag) + " seconds"
+                    message += performance_data(perf_data,[(maximal_lag,"replication_lag",warning, critical)])
+                    return check_levels(maximal_lag,warning,critical,message)
+            elif host_node["stateStr"] == "ARBITER":
+                print "OK - This is an arbiter"
                 return 0
-            else:
-                #get the maximal replication lag 
-                data=""
-                maximal_lag=0
-                for member in rs_status['members']:
-                    lastSlaveOpTime = member['optimeDate']
-                    replicationLag = abs(primary_node["optimeDate"] - lastSlaveOpTime).seconds - slaveDelays[member['name']]
-                    data = data + member['name'] + " lag=%d;" % replicationLag
-                    maximal_lag = max(maximal_lag, replicationLag)
-                message = "Maximal lag is "+str( maximal_lag) + " seconds"
-                message +=performance_data(perf_data,[(maximal_lag,"replication_lag",warning, critical)])
-                return check_levels(maximal_lag,warning,critical,message)
-        elif host_node["stateStr"] == "ARBITER":
-            print "OK - This is an arbiter"
-            return 0
 
-        # Find the difference in optime between current node and PRIMARY
-        optime_lag = abs(primary_node["optimeDate"] - host_node["optimeDate"])
-        lag = optime_lag.seconds
-        message = "Lag is "+ str(lag) + " seconds"
-        message +=performance_data(perf_data,[(lag,"replication_lag",warning, critical)])
-        return check_levels(lag,warning+slaveDelays[host_node['name']],critical+slaveDelays[host_node['name']],message)
+            # Find the difference in optime between current node and PRIMARY
+            optime_lag = abs(primary_node["optimeDate"] - host_node["optimeDate"])
+            lag = optime_lag.seconds
+            message = "Lag is "+ str(lag) + " seconds"
+            message += performance_data(perf_data,[(lag,"replication_lag",warning, critical)])
+            return check_levels(lag,warning+slaveDelays[host_node['name']],critical+slaveDelays[host_node['name']],message)
+        else:
+            #
+            # less then 2.0 check
+            #
+            # Get replica set status
+            rs_status = con.admin.command("replSetGetStatus")
 
+            # Find the primary and/or the current node
+            primary_node = None
+            host_node = None
+            for member in rs_status["members"]:
+                if member["stateStr"] == "PRIMARY":
+                    primary_node = (member["name"], member["optimeDate"])
+                if member["name"].split(":")[0].startswith(host):
+                    host_node = member
+
+            # Check if we're in the middle of an election and don't have a primary
+            if primary_node is None:
+                print "WARNING - No primary defined. In an election?"
+                sys.exit(1)
+
+            # Is the specified host the primary?
+            if host_node["stateStr"] == "PRIMARY":
+                print "OK - This is the primary."
+                sys.exit(0)
+
+            # Find the difference in optime between current node and PRIMARY
+            optime_lag = abs(primary_node[1] - host_node["optimeDate"])
+            lag = optime_lag.seconds
+
+            message = "Lag is "+ str(lag) + " seconds"
+            message += performance_data(perf_data, [(lag, "replication_lag", warning, critical)])
+            return check_levels(lag, warning, critical, message)
+    
     except Exception, e:
-        print e
         return exit_with_general_critical(e)
 
 def check_memory(con, warning, critical, perf_data,mapped_memory):
