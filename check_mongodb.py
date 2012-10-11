@@ -117,6 +117,7 @@ def main(argv):
     p.add_option('-u', '--user', action='store', type='string', dest='user', default=None, help='The username you want to login as')
     p.add_option('-p', '--pass', action='store', type='string', dest='passwd', default=None, help='The password you want to use for that user')
     p.add_option('-W', '--warning', action='store', dest='warning', default=None, help='The warning threshold we want to set')
+    p.add_option('-a', action='store', type='string', dest='auth', default=None, help='The path to a plain text file containing username:password')
     p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold we want to set')
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
@@ -135,6 +136,14 @@ def main(argv):
     p.add_option('-T', '--time', action='store', type='int', dest='sample_time', default=1, help='Time used to sample number of pages faults')
 
     options, arguments = p.parse_args()
+
+
+    if options.auth and os.path.exists(options.auth):
+        f = open(options.auth, 'r')
+        auth = f.readline()
+        f.close()
+        options.user = auth.split(":")[0].strip()
+        options.passwd = auth.split(":")[1].strip()
 
     host = options.host
     port = options.port
