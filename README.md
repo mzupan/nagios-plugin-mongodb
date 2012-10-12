@@ -231,3 +231,17 @@ define service {
 }
 </code></pre>
 
+#### Check Primary Connection
+
+This will check each host that is listed in the Mongo Servers group. It will issue a warning if the connection to the primary server of current replicaset takes 2 seconds and a critical error if it takes over 4 seconds
+
+<pre><code>
+define service {
+    use                 generic-service
+    hostgroup_name          Mongo Servers
+    service_description     Mongo Connect Check
+    check_command           check_mongodb!connect_primary!27017!2!4
+}
+</code></pre>
+
+

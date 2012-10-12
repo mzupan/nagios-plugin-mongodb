@@ -122,7 +122,7 @@ def main(argv):
                  choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
                           'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog','journal_commits_in_wl',
                           'write_data_files','journaled','opcounters','current_lock','replica_primary','page_faults','asserts', 'queries_per_second',
-                          'page_faults', 'chunks_balance'])
+                          'page_faults', 'chunks_balance', 'connect_primary'])
     p.add_option('--max-lag',action='store_true',dest='max_lag',default=False,help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory',action='store_true',dest='mapped_memory',default=False,help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -223,6 +223,8 @@ def main(argv):
         check_page_faults(con, sample_time, warning, critical, perf_data)
     elif action == "chunks_balance":
         chunks_balance(con, database, collection, warning, critical)
+    elif action == "connect_primary":
+        return check_connect_primary(con, warning, critical, perf_data)
     else:
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
@@ -1040,6 +1042,41 @@ def chunks_balance(con, database, collection, warning, critical):
 
     print "OK - Chunks well balanced across shards"
     sys.exit(0)
+
+
+def check_connect_primary(con, warning, critical, perf_data):
+    warning = warning or 3
+    critical = critical or 6
+
+    try:
+        try:
+            set_read_preference(con.admin)
+            data = con.admin.command(pymongo.son_manipulator.SON([('isMaster', 1)]))
+        except:
+            data = con.admin.command(son.SON([('isMaster', 1)]))
+
+        if data['ismaster'] == True :
+            print "OK - This server is primary"
+            return 0
+		
+        phost = data['primary'].split(':')[0]
+        pport = int(data['primary'].split(':')[1])
+        start = time.time()
+
+        err,con=mongo_connect(phost, pport)
+        if err!=0:
+            return err 
+
+        pconn_time = time.time() - start
+        pconn_time = round(pconn_time, 0)
+        message = "Connection to primary server "+data['primary']+" took %i seconds" % pconn_time
+        message += performance_data(perf_data,[(pconn_time,"connection_time",warning,critical)])
+
+        return check_levels(pconn_time,warning,critical,message)
+		
+    except Exception, e:
+        return exit_with_general_critical(e)
+
 
 def build_file_name(host, action):
     #done this way so it will work when run independently and from shell
