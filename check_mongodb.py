@@ -119,7 +119,7 @@ def main(argv):
     p.add_option('-W', '--warning', action='store', dest='warning', default=None, help='The warning threshold we want to set')
     p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold we want to set')
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
-                 choices=['connect', 'connections', 'replication_lag', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
+                 choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
                           'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog','journal_commits_in_wl',
                           'write_data_files','journaled','opcounters','current_lock','replica_primary','page_faults','asserts', 'queries_per_second',
                           'page_faults', 'chunks_balance', 'connect_primary'])
@@ -175,7 +175,9 @@ def main(argv):
     if action == "connections":
         return check_connections(con, warning, critical, perf_data)
     elif action == "replication_lag":
-        return check_rep_lag(con, host, warning, critical, perf_data,max_lag)
+        return check_rep_lag(con, host, warning, critical, False, perf_data,max_lag)
+    elif action == "replication_lag_percent":
+        return check_rep_lag(con, host, warning, critical, True, perf_data,max_lag)
     elif action == "replset_state":
         return check_replset_state(con,perf_data, warning , critical )
     elif action == "memory":
@@ -301,9 +303,13 @@ def check_connections(con, warning, critical, perf_data):
         return exit_with_general_critical(e)
 
 
-def check_rep_lag(con, host, warning, critical, perf_data,max_lag):
-    warning = warning or 600
-    critical = critical or 3600
+def check_rep_lag(con, host, warning, critical, percent, perf_data,max_lag):
+    if percent:
+        warning = warning or 50
+        critical = critical or 75
+    else:
+        warning = warning or 600
+        critical = critical or 3600
     rs_status = {}
     slaveDelays = {}
     try:
@@ -367,8 +373,17 @@ def check_rep_lag(con, host, warning, critical, perf_data,max_lag):
                         replicationLag = abs(primary_node["optimeDate"] - lastSlaveOpTime).seconds - slaveDelays[member['name']]
                         data = data + member['name'] + " lag=%d;" % replicationLag
                         maximal_lag = max(maximal_lag, replicationLag)
-                    message = "Maximal lag is "+str( maximal_lag) + " seconds"
-                    message += performance_data(perf_data,[(maximal_lag,"replication_lag",warning, critical)])
+                    if percent:
+                        err, con=mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]))
+                        if err!=0:
+                            return err 
+                        primary_timediff=replication_get_time_diff(con)
+                        maximal_lag=int(float(maximal_lag)/float(primary_timediff)*100)
+                        message = "Maximal lag is "+str( maximal_lag) + " percents"
+                        message += performance_data(perf_data,[(maximal_lag,"replication_lag_percent",warning, critical)])
+                    else:
+                        message = "Maximal lag is "+str( maximal_lag) + " seconds"
+                        message += performance_data(perf_data,[(maximal_lag,"replication_lag",warning, critical)])
                     return check_levels(maximal_lag,warning,critical,message)
             elif host_node["stateStr"] == "ARBITER":
                 print "OK - This is an arbiter"
@@ -377,8 +392,17 @@ def check_rep_lag(con, host, warning, critical, perf_data,max_lag):
             # Find the difference in optime between current node and PRIMARY
             optime_lag = abs(primary_node["optimeDate"] - host_node["optimeDate"])
             lag = optime_lag.seconds
-            message = "Lag is "+ str(lag) + " seconds"
-            message += performance_data(perf_data,[(lag,"replication_lag",warning, critical)])
+            if percent:
+                err, con=mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]))
+                if err!=0:
+                    return err 
+                primary_timediff=replication_get_time_diff(con)
+                lag=int(float(lag)/float(primary_timediff)*100)
+                message = "Lag is "+str(lag) + " percents"
+                message += performance_data(perf_data,[(lag,"replication_lag_percent",warning, critical)])
+            else:
+                message = "Lag is "+ str(lag) + " seconds"
+                message += performance_data(perf_data,[(lag,"replication_lag",warning, critical)])
             return check_levels(lag,warning+slaveDelays[host_node['name']],critical+slaveDelays[host_node['name']],message)
         else:
             #
@@ -409,9 +433,17 @@ def check_rep_lag(con, host, warning, critical, perf_data,max_lag):
             # Find the difference in optime between current node and PRIMARY
             optime_lag = abs(primary_node[1] - host_node["optimeDate"])
             lag = optime_lag.seconds
-
-            message = "Lag is "+ str(lag) + " seconds"
-            message += performance_data(perf_data, [(lag, "replication_lag", warning, critical)])
+            if percent:
+                err, con=mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]))
+                if err!=0:
+                    return err 
+                primary_timediff=replication_get_time_diff(con)
+                lag=int(float(lag)/float(primary_timediff)*100)
+                message = "Lag is "+str(lag) + " percents"
+                message += performance_data(perf_data,[(lag,"replication_lag_percent",warning, critical)])
+            else:
+                message = "Lag is "+ str(lag) + " seconds"
+                message += performance_data(perf_data, [(lag, "replication_lag", warning, critical)])
             return check_levels(lag, warning, critical, message)
     
     except Exception, e:
@@ -1141,6 +1173,21 @@ def maintain_delta(new_vals,host,action):
     write_res=write_values(file_name,";".join(str(x) for x in new_vals))
     return err+write_res,delta
      
+def replication_get_time_diff(con):
+    col='oplog.rs'
+    local=con.local
+    ol=local.system.namespaces.find_one({"name": "local.oplog.$main"})
+    if ol:
+        col='oplog.$main'
+    firstc=local[col].find().sort("$natural",1).limit(1)
+    lastc=local[col].find().sort("$natural",-1).limit(1)
+    first=firstc.next()
+    last=lastc.next()
+    tfirst=first["ts"]
+    tlast=last["ts"]
+    delta=tlast.time-tfirst.time
+    return delta
+
 #
 # main app
 #
