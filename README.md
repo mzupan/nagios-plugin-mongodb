@@ -91,6 +91,21 @@ define service {
 }
 </code></pre>
 
+
+#### Check Replication Lag Percentage
+
+This is a test that will test the replication lag percentage of Mongo servers. It will send out a warning if the lag is over 50 percents and a critical error if its over 75 percents. Please note that this check gets oplog timeDiff from primary and compares it to replication lag. When this check reaches 100 percent full resync is needed. 
+
+<pre><code>
+define service {
+    use                 generic-service
+    hostgroup_name          Mongo Servers
+    service_description     Mongo Replication Lag Percentage
+    check_command           check_mongodb!replication_lag_percent!27017!50!75
+}
+</code></pre>
+
+
 #### Check Memory Usage
 
 This is a test that will test the memory usage of Mongo server. In my example my Mongo servers have 32 gigs of memory so I'll trigger a warning if Mongo uses over 20 gigs of ram and a error if Mongo uses over 28 gigs of memory.
@@ -230,4 +245,18 @@ define service {
       check_command           check_mongodb_query!queries_per_second!27017!200!150!update
 }
 </code></pre>
+
+#### Check Primary Connection
+
+This will check each host that is listed in the Mongo Servers group. It will issue a warning if the connection to the primary server of current replicaset takes 2 seconds and a critical error if it takes over 4 seconds
+
+<pre><code>
+define service {
+    use                 generic-service
+    hostgroup_name          Mongo Servers
+    service_description     Mongo Connect Check
+    check_command           check_mongodb!connect_primary!27017!2!4
+}
+</code></pre>
+
 
