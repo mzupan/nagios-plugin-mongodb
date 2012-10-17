@@ -373,11 +373,20 @@ def check_rep_lag(con, host, warning, critical, perf_data,max_lag):
                 return 0
 
             # Find the difference in optime between current node and PRIMARY
+
             optime_lag = abs(primary_node["optimeDate"] - host_node["optimeDate"])
+
+            if host_node['name'] in slaveDelays:
+                slave_delay = slaveDelays[host_node['name']]
+            elif host_node['name'].endswith(':27017') and host_node['name'][:-len(":27017")] in slaveDelays:
+                slave_delay = slaveDelays[host_node['name'][:-len(":27017")]]
+            else:
+                raise Exception("Unable to determine slave delay for {0}".format(host_node['name']))
+
             lag = optime_lag.seconds
             message = "Lag is "+ str(lag) + " seconds"
             message += performance_data(perf_data,[(lag,"replication_lag",warning, critical)])
-            return check_levels(lag,warning+slaveDelays[host_node['name']],critical+slaveDelays[host_node['name']],message)
+            return check_levels(lag,warning+slave_delay,critical+slave_delay,message)
         else:
             #
             # less then 2.0 check
