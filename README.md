@@ -49,7 +49,7 @@ define command {
     command_line    $USER1$/nagios-plugin-mongodb/check_mongodb.py -H $HOSTADDRESS$ -A $ARG1$ -P $ARG2$ -W $ARG3$ -C $ARG4$ -q $ARG5$
 }
 </code></pre>
-
+(add -D to the command if you want to add perfdata to the output)
 Then you can reference it like the following. This is is my services.cfg
 
 #### Check Connection
@@ -179,7 +179,7 @@ This is a test that will check the ratio of index hits to misses. If the ratio i
 define service {
       use                     generic-service
       hostgroup_name          Mongo Servers
-      service_description     MongoDB state
+      service_description     MongoDB Index Miss Ratio
       check_command           check_mongodb!index_miss_ratio!27017!.005!.01
 }
 </code></pre>
