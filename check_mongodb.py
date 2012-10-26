@@ -406,7 +406,10 @@ def check_rep_lag(con, host, warning, critical, percent, perf_data,max_lag):
                 if err!=0:
                     return err 
                 primary_timediff=replication_get_time_diff(con)
-                lag=int(float(lag)/float(primary_timediff)*100)
+                if primary_timediff!=0: 
+                    lag=int(float(lag)/float(primary_timediff)*100)
+                else:
+                    lag=0
                 message = "Lag is "+str(lag) + " percents"
                 message += performance_data(perf_data,[(lag,"replication_lag_percent",warning, critical)])
             else:
