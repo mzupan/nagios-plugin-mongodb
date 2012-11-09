@@ -400,7 +400,11 @@ def check_rep_lag(con, host, warning, critical, percent, perf_data,max_lag):
             else:
                 raise Exception("Unable to determine slave delay for {0}".format(host_node['name']))
 
-            lag = optime_lag.total_seconds()
+            try: #work starting from python2.7
+                lag = optime_lag.total_seconds()
+            except:
+                lag = float(optime_lag.seconds + optime_lag.days * 24 * 3600)
+
             if percent:
                 err, con=mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]))
                 if err!=0:
