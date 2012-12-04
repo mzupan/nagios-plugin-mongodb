@@ -122,7 +122,7 @@ def main(argv):
                  choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
                           'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog','journal_commits_in_wl',
                           'write_data_files','journaled','opcounters','current_lock','replica_primary','page_faults','asserts', 'queries_per_second',
-                          'page_faults', 'chunks_balance', 'connect_primary'])
+                          'page_faults', 'chunks_balance', 'connect_primary', 'collection_state'])
     p.add_option('--max-lag',action='store_true',dest='max_lag',default=False,help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory',action='store_true',dest='mapped_memory',default=False,help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -227,6 +227,8 @@ def main(argv):
         chunks_balance(con, database, collection, warning, critical)
     elif action == "connect_primary":
         return check_connect_primary(con, warning, critical, perf_data)
+    elif action == "collection_state":
+        return check_collection_state(con, database, collection)
     else:
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
@@ -1121,6 +1123,16 @@ def check_connect_primary(con, warning, critical, perf_data):
         message += performance_data(perf_data,[(pconn_time,"connection_time",warning,critical)])
 
         return check_levels(pconn_time,warning,critical,message)
+		
+    except Exception, e:
+        return exit_with_general_critical(e)
+
+
+def check_collection_state(con, database, collection):
+    try:
+        con[database][collection].find_one()
+        print "OK - Collection %s.%s is reachable " % (database, collection)
+        return 0
 		
     except Exception, e:
         return exit_with_general_critical(e)
