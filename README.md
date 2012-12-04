@@ -260,3 +260,17 @@ define service {
 </code></pre>
 
 
+#### Check Collection State
+
+This will check each host that is listed in the Mongo Servers group. It can be useful to check availability of a critical collection (locks, timeout, config server unavailable...).  It will issue a critical error if find_one query failed
+
+<pre><code>
+define service {
+    use                 generic-service
+    hostgroup_name          Mongo Servers
+    service_description     Mongo Collection State
+    check_command           check_mongodb!collection_state!27017!your-database!your-collection
+}
+</code></pre>
+
+
