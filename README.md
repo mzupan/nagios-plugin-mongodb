@@ -119,6 +119,19 @@ define service {
 }
 </code></pre>
 
+#### Check Mapped Memory Usage
+
+This is a test that will check the mapped memory usage of Mongo server. 
+
+<pre><code>
+define service {
+    use                 generic-service
+    hostgroup_name          Mongo Servers
+    service_description     Mongo Mapped Memory Usage
+    check_command           check_mongodb!memory_mapped!27017!20!28
+}
+</code></pre>
+
 #### Check Lock Time Percentage
 
 This is a test that will test the lock time percentage of Mongo server. In my example my Mongo I want to be warned if the lock time is above 5% and get an error if it's above 10%. When you start to have lock time it generally means your db is now overloaded.

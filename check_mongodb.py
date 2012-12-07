@@ -119,8 +119,8 @@ def main(argv):
     p.add_option('-W', '--warning', action='store', dest='warning', default=None, help='The warning threshold we want to set')
     p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold we want to set')
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
-                 choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'lock', 'flushing', 'last_flush_time',
-                          'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog','journal_commits_in_wl',
+                 choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'memory_mapped', 'lock', 
+                          'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size','queues','oplog','journal_commits_in_wl',
                           'write_data_files','journaled','opcounters','current_lock','replica_primary','page_faults','asserts', 'queries_per_second',
                           'page_faults', 'chunks_balance', 'connect_primary', 'collection_state'])
     p.add_option('--max-lag',action='store_true',dest='max_lag',default=False,help='Get max replication lag (for replication_lag action only)')
@@ -182,6 +182,8 @@ def main(argv):
         return check_replset_state(con,perf_data, warning , critical )
     elif action == "memory":
         return check_memory(con, warning, critical, perf_data,options.mapped_memory)
+    elif action == "memory_mapped":
+        return check_memory_mapped(con, warning, critical, perf_data)
     elif action == "queues":
         return check_queues(con, warning, critical, perf_data)
     elif action == "lock":
@@ -512,6 +514,44 @@ def check_memory(con, warning, critical, perf_data,mapped_memory):
             return check_levels(mem_mapped,warning,critical,message) 
         else:
             return check_levels(mem_resident,warning,critical,message)
+
+    except Exception, e:
+        return exit_with_general_critical(e)
+
+
+def check_memory_mapped(con, warning, critical, perf_data):
+    #
+    # These thresholds are basically meaningless, and must be customized to your application
+    #
+    warning = warning or 8
+    critical = critical or 16
+    try:
+        data=get_server_status(con)
+        if not data['mem']['supported']:
+            print "OK - Platform not supported for memory info"
+            return 0
+        #
+        # convert to gigs
+        #
+        message = "Memory Usage:"
+        try:
+            mem_mapped = float(data['mem']['mapped']) / 1024.0
+            message +=" %.2fGB mapped," % mem_mapped
+        except:
+            mem_mapped = -1 
+            message +=" mapped unsupported,"
+        try:
+            mem_mapped_journal = float(data['mem']['mappedWithJournal']) / 1024.0
+            message +=" %.2fGB mappedWithJournal" % mem_mapped_journal
+        except:
+            mem_mapped_journal = 0 
+        message +=performance_data(perf_data,[("%.2f" % mem_mapped,"memory_mapped"),("%.2f" %mem_mapped_journal,"mappedWithJournal")])
+
+        if not mem_mapped==-1: 
+            return check_levels(mem_mapped,warning,critical,message) 
+        else:
+            print "OK - Server does not provide mem.mapped info"
+            return 0
 
     except Exception, e:
         return exit_with_general_critical(e)
