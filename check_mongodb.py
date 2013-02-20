@@ -77,25 +77,25 @@ def check_levels(param, warning, critical,message,ok=[]):
     if (numeric_type(critical) and numeric_type(warning)):
         if param >= critical:
             print "CRITICAL - " + message
-            return 2
+            sys.exit(2)
         elif param >= warning:
             print "WARNING - " + message
-            return 1
+            sys.exit(1)
         else:
             print "OK - " + message
-            return 0
+            sys.exit(0)
     else:
         if param in critical:
             print "CRITICAL - " + message
-            return 2
+            sys.exit(2)
 
         if param in warning:
             print "WARNING - " + message
-            return 1
+            sys.exit(1)
 
         if param in ok:
             print "OK - " + message
-            return 0
+            sys.exit(0)
 
         # unexpected param value
         print "CRITICAL - Unexpected value : %d" % param + "; " + message
@@ -215,8 +215,6 @@ def main(argv):
         return check_write_to_datafiles(con, warning, critical,perf_data)
     elif action == "opcounters":
         return check_opcounters(con,host, warning, critical,perf_data)
-    elif action == "page_faults":
-        return check_page_faults(con,host, warning, critical,perf_data)
     elif action == "asserts":
         return check_asserts(con,host, warning, critical,perf_data)
     elif action == "replica_primary":
