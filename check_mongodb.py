@@ -371,10 +371,11 @@ def check_rep_lag(con, host, warning, critical, percent, perf_data,max_lag):
                     data = ""
                     maximal_lag = 0
                     for member in rs_status['members']:
-                        lastSlaveOpTime = member['optimeDate']
-                        replicationLag = abs(primary_node["optimeDate"] - lastSlaveOpTime).seconds - slaveDelays[member['name']]
-                        data = data + member['name'] + " lag=%d;" % replicationLag
-                        maximal_lag = max(maximal_lag, replicationLag)
+                        if not member['stateStr'] == "ARBITER":
+                          lastSlaveOpTime = member['optimeDate']
+                          replicationLag = abs(primary_node["optimeDate"] - lastSlaveOpTime).seconds - slaveDelays[member['name']]
+                          data = data + member['name'] + " lag=%d;" % replicationLag
+                          maximal_lag = max(maximal_lag, replicationLag)
                     if percent:
                         err, con=mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]))
                         if err!=0:
