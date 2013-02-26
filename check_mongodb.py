@@ -136,6 +136,8 @@ def main(argv):
 
     options, arguments = p.parse_args()
 
+    global user
+    global passwd
     host = options.host
     port = options.port
     user = options.user
@@ -159,7 +161,8 @@ def main(argv):
 
     if action == 'replica_primary' and replicaset is None:
         return "replicaset must be passed in when using replica_primary check"
-        
+    elif not action == 'replica_primary' and replicaset:
+        return "passing a replicaset while not checking replica_primary does not work"
 
     #
     # moving the login up here and passing in the connection
@@ -248,7 +251,7 @@ def mongo_connect(host=None, port=None,ssl=False, user=None,passwd=None,replica=
 
         if user and passwd:
             db = con["admin"]
-            db.authenticate(user, passwd)
+            if not db.authenticate(user, passwd): sys.exit("Username/Password incorrect")
     except Exception, e:
         if isinstance(e,pymongo.errors.AutoReconnect) and str(e).find(" is an arbiter") != -1:
             # We got a pymongo AutoReconnect exception that tells us we connected to an Arbiter Server
@@ -342,12 +345,10 @@ def check_rep_lag(con, host, warning, critical, percent, perf_data,max_lag):
             primary_node = None
             host_node = None
             
-            host_status = con.admin.command("ismaster", "1")
-
             for member in rs_status["members"]:
                 if member["stateStr"] == "PRIMARY":
                     primary_node = member
-                if member["name"] == host_status['me']:
+                if member["name"].split(':')[0] == host:
                     host_node = member
 
             # Check if we're in the middle of an election and don't have a primary
@@ -377,7 +378,7 @@ def check_rep_lag(con, host, warning, critical, percent, perf_data,max_lag):
                           data = data + member['name'] + " lag=%d;" % replicationLag
                           maximal_lag = max(maximal_lag, replicationLag)
                     if percent:
-                        err, con=mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]))
+                        err, con=mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]), user=user, passwd=passwd)
                         if err!=0:
                             return err 
                         primary_timediff=replication_get_time_diff(con)
@@ -409,7 +410,7 @@ def check_rep_lag(con, host, warning, critical, percent, perf_data,max_lag):
                 lag = float(optime_lag.seconds + optime_lag.days * 24 * 3600)
 
             if percent:
-                err, con=mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]))
+                err, con=mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]), user=user, passwd=passwd)
                 if err!=0:
                     return err 
                 primary_timediff=replication_get_time_diff(con)
@@ -425,7 +426,7 @@ def check_rep_lag(con, host, warning, critical, percent, perf_data,max_lag):
             return check_levels(lag,warning+slaveDelays[host_node['name']],critical+slaveDelays[host_node['name']],message)
         else:
             #
-            # less then 2.0 check
+            # less than 2.0 check
             #
             # Get replica set status
             rs_status = con.admin.command("replSetGetStatus")
@@ -453,7 +454,7 @@ def check_rep_lag(con, host, warning, critical, percent, perf_data,max_lag):
             optime_lag = abs(primary_node[1] - host_node["optimeDate"])
             lag = optime_lag.seconds
             if percent:
-                err, con=mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]))
+                err, con=mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]), user=user, passwd=passwd)
                 if err!=0:
                     return err 
                 primary_timediff=replication_get_time_diff(con)
