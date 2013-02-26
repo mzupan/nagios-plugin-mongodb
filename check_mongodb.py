@@ -159,7 +159,8 @@ def main(argv):
 
     if action == 'replica_primary' and replicaset is None:
         return "replicaset must be passed in when using replica_primary check"
-        
+    elif not action == 'replica_primary' and replicaset:
+        return "passing a replicaset while not checking replica_primary does not work"
 
     #
     # moving the login up here and passing in the connection
