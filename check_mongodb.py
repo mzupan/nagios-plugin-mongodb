@@ -249,7 +249,7 @@ def mongo_connect(host=None, port=None,ssl=False, user=None,passwd=None,replica=
 
         if user and passwd:
             db = con["admin"]
-            db.authenticate(user, passwd)
+            if not db.authenticate(user, passwd): sys.exit("Username/Password incorrect")
     except Exception, e:
         if isinstance(e,pymongo.errors.AutoReconnect) and str(e).find(" is an arbiter") != -1:
             # We got a pymongo AutoReconnect exception that tells us we connected to an Arbiter Server
