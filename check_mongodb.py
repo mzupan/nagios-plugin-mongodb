@@ -425,7 +425,7 @@ def check_rep_lag(con, host, warning, critical, percent, perf_data,max_lag):
             return check_levels(lag,warning+slaveDelays[host_node['name']],critical+slaveDelays[host_node['name']],message)
         else:
             #
-            # less then 2.0 check
+            # less than 2.0 check
             #
             # Get replica set status
             rs_status = con.admin.command("replSetGetStatus")
