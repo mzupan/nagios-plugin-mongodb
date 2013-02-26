@@ -343,12 +343,10 @@ def check_rep_lag(con, host, warning, critical, percent, perf_data,max_lag):
             primary_node = None
             host_node = None
             
-            host_status = con.admin.command("ismaster", "1")
-
             for member in rs_status["members"]:
                 if member["stateStr"] == "PRIMARY":
                     primary_node = member
-                if member["name"] == host_status['me']:
+                if member["name"].split(':')[0] == host:
                     host_node = member
 
             # Check if we're in the middle of an election and don't have a primary
