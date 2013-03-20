@@ -218,7 +218,7 @@ def main(argv):
     elif action == "asserts":
         return check_asserts(con,host, warning, critical,perf_data)
     elif action == "replica_primary":
-        return check_replica_primary(con,host, warning, critical,perf_data)
+        return check_replica_primary(con,host, warning, critical,perf_data, replicaset)
     elif action == "queries_per_second":
         return check_queries_per_second(con, query_type, warning, critical, perf_data)
     elif action == "page_faults":
@@ -246,7 +246,8 @@ def mongo_connect(host=None, port=None,ssl=False, user=None,passwd=None,replica=
             if replica is None:
                 con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
             else:
-                con = pymongo.Connection(host, port, slave_okay=True, replicaSet=replica, network_timeout=10)
+                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
+                #con = pymongo.Connection(host, port, slave_okay=True, replicaSet=replica, network_timeout=10)
 
         if user and passwd:
             db = con["admin"]
@@ -1036,7 +1037,7 @@ def get_stored_primary_server_name(db):
     return stored_primary_server
 
 
-def check_replica_primary(con,host, warning, critical,perf_data):
+def check_replica_primary(con,host, warning, critical,perf_data, replicaset):
     """ A function to check if the primary server of a replica set has changed """
     if warning is None and critical is None:
         warning=1
@@ -1047,6 +1048,10 @@ def check_replica_primary(con,host, warning, critical,perf_data):
     message="Primary server has not changed"
     db=con["nagios"]
     data=get_server_status(con)
+    if replicaset != data['repl'].get('setName'):
+        message = "Replica set requested: %s differs from the one found: %s" % (replicaset, data['repl'].get('setName')) 
+        primary_status = 2
+        return check_levels(primary_status,warning,critical,message)
     current_primary=data['repl'].get('primary')
     saved_primary=get_stored_primary_server_name(db)
     if current_primary is None:
