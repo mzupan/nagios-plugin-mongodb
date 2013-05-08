@@ -69,6 +69,9 @@ def performance_data(perf_data, params):
                 warning = warning or 0
                 critical = critical or 0
                 data += ";%s;%s" % (warning, critical)
+                
+            data += " "
+            
     return data
 
 
