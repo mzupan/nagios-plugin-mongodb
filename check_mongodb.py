@@ -622,7 +622,11 @@ def index_miss_ratio(con, warning, critical, perf_data):
         data = get_server_status(con)
 
         try:
-            miss_ratio = float(data['indexCounters']['btree']['missRatio'])
+            serverVersion = tuple(con.server_info()['version'].split('.'))
+            if serverVersion >= tuple("2.4.0".split(".")):
+                miss_ratio = float(data['indexCounters']['missRatio'])
+            else:
+                miss_ratio = float(data['indexCounters']['btree']['missRatio'])
         except KeyError:
             not_supported_msg = "not supported on this platform"
             if data['indexCounters'].has_key('note'):
