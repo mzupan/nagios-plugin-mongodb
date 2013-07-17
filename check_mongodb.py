@@ -185,9 +185,9 @@ def main(argv):
     if action == "connections":
         return check_connections(con, warning, critical, perf_data)
     elif action == "replication_lag":
-        return check_rep_lag(con, host, warning, critical, False, perf_data, max_lag, user, passwd)
+        return check_rep_lag(con, host, port, warning, critical, False, perf_data, max_lag, user, passwd)
     elif action == "replication_lag_percent":
-        return check_rep_lag(con, host, warning, critical, True, perf_data, max_lag, user, passwd)
+        return check_rep_lag(con, host, port, warning, critical, True, perf_data, max_lag, user, passwd)
     elif action == "replset_state":
         return check_replset_state(con, perf_data, warning, critical)
     elif action == "memory":
@@ -324,7 +324,7 @@ def check_connections(con, warning, critical, perf_data):
         return exit_with_general_critical(e)
 
 
-def check_rep_lag(con, host, warning, critical, percent, perf_data, max_lag, user, passwd):
+def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_lag, user, passwd):
     if percent:
         warning = warning or 50
         critical = critical or 75
@@ -363,7 +363,7 @@ def check_rep_lag(con, host, warning, critical, percent, perf_data, max_lag, use
             for member in rs_status["members"]:
                 if member["stateStr"] == "PRIMARY":
                     primary_node = member
-                if member["name"].split(':')[0] == host:
+                if member["name"].split(':')[0] == host and int(member["name"].split(':')[1]) == port:
                     host_node = member
 
             # Check if we're in the middle of an election and don't have a primary
