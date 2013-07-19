@@ -823,7 +823,7 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data):
             query_per_sec = float(diff_query) / float(diff_ts)
 
             # update the count now
-            db.nagios_check.update(last_count, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
+            db.nagios_check.update({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
 
             message = "Queries / Sec: %f" % query_per_sec
             message += performance_data(perf_data, [(query_per_sec, "%s_per_sec" % query_type, warning, critical, message)])
@@ -832,7 +832,7 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data):
             # since it is the first run insert it
             query_per_sec = 0
             message = "First run of check.. no data"
-            db.nagios_check.update(last_count, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
+            db.nagios_check.update({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
         except TypeError:
             #
             # since it is the first run insert it
