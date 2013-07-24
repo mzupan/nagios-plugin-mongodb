@@ -131,9 +131,9 @@ def main(argv):
     p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold we want to set')
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'memory_mapped', 'lock',
-                          'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'queues', 'oplog', 'journal_commits_in_wl',
-                          'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary', 'page_faults', 'asserts', 'queries_per_second',
-                          'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count'])
+                          'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_indexes', 'collection_indexes',
+                          'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary', 'page_faults',
+                          'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count'])
     p.add_option('--max-lag', action='store_true', dest='max_lag', default=False, help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory', action='store_true', dest='mapped_memory', default=False, help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -220,6 +220,10 @@ def main(argv):
             return check_all_databases_size(con, warning, critical, perf_data)
         else:
             return check_database_size(con, database, warning, critical, perf_data)
+    elif action == "database_indexes":
+        return check_database_indexes(con, database, warning, critical, perf_data)
+    elif action == "collection_indexes":
+        return check_collection_indexes(con, database, collection, warning, critical, perf_data)
     elif action == "journaled":
         return check_journaled(con, warning, critical, perf_data)
     elif action == "write_data_files":
@@ -782,6 +786,60 @@ def check_database_size(con, database, warning, critical, perf_data):
             return 1
         else:
             print "OK - Database size: %.0f MB, Database: %s%s" % (storage_size, database, perfdata)
+            return 0
+    except Exception, e:
+        return exit_with_general_critical(e)
+
+
+def check_database_indexes(con, database, warning, critical, perf_data):
+    #
+    # These thresholds are basically meaningless, and must be customized to your application
+    #
+    warning = warning or 100
+    critical = critical or 1000
+    perfdata = ""
+    try:
+        set_read_preference(con.admin)
+        data = con[database].command('dbstats')
+        index_size = data['indexSize'] / 1024 / 1024
+        if perf_data:
+            perfdata += " | database_indexes=%i;%i;%i" % (index_size, warning, critical)
+
+        if index_size >= critical:
+            print "CRITICAL - %s indexSize: %.0f MB %s" % (database, index_size, perfdata)
+            return 2
+        elif index_size >= warning:
+            print "WARNING - %s indexSize: %.0f MB %s" % (database, index_size, perfdata)
+            return 1
+        else:
+            print "OK - %s indexSize: %.0f MB %s" % (database, index_size, perfdata)
+            return 0
+    except Exception, e:
+        return exit_with_general_critical(e)
+
+
+def check_collection_indexes(con, database, collection, warning, critical, perf_data):
+    #
+    # These thresholds are basically meaningless, and must be customized to your application
+    #
+    warning = warning or 100
+    critical = critical or 1000
+    perfdata = ""
+    try:
+        set_read_preference(con.admin)
+        data = con[database].command('collstats', collection)
+        total_index_size = data['totalIndexSize'] / 1024 / 1024
+        if perf_data:
+            perfdata += " | collection_indexes=%i;%i;%i" % (total_index_size, warning, critical)
+
+        if total_index_size >= critical:
+            print "CRITICAL - %s.%s totalIndexSize: %.0f MB %s" % (database, collection, total_index_size, perfdata)
+            return 2
+        elif total_index_size >= warning:
+            print "WARNING - %s.%s totalIndexSize: %.0f MB %s" % (database, collection, total_index_size, perfdata)
+            return 1
+        else:
+            print "OK - %s.%s totalIndexSize: %.0f MB %s" % (database, collection, total_index_size, perfdata)
             return 0
     except Exception, e:
         return exit_with_general_critical(e)
