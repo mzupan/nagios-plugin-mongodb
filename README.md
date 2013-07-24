@@ -38,6 +38,10 @@ define command {
     command_line    $USER1$/nagios-plugin-mongodb/check_mongodb.py -H $HOSTADDRESS$ -A $ARG1$ -P $ARG2$ -W $ARG3$ -C $ARG4$ -d $ARG5$
 }
 
+define command {
+    command_name    check_mongodb_collection
+    command_line    $USER1$/nagios-plugin-mongodb/check_mongodb.py -H $HOSTADDRESS$ -A $ARG1$ -P $ARG2$ -W $ARG3$ -C $ARG4$ -d $ARG5$ -c $ARG6$
+}
 
 define command {
     command_name    check_mongodb_replicaset
@@ -227,6 +231,34 @@ define service {
       hostgroup_name          Mongo Servers
       service_description     MongoDB Database size your-database
       check_command           check_mongodb_database!database_size!27017!300!500!your-database
+}
+</code></pre>
+
+
+
+#### Check index size of a database
+This will check the index size of a database. Overlarge indexes eat up memory and indicate a need for compaction.
+Replace your-database with the name of your database
+<pre><code>
+define service {
+      use                     generic-service
+      hostgroup_name          Mongo Servers
+      service_description     MongoDB Database index size your-database
+      check_command           check_mongodb_database!database_indexes!27017!50!100!your-database
+}
+</code></pre>
+
+
+
+#### Check index size of a collection
+This will check the index size of a collection. Overlarge indexes eat up memory and indicate a need for compaction.
+Replace your-database with the name of your database and your-collection with the name of your collection
+<pre><code>
+define service {
+      use                     generic-service
+      hostgroup_name          Mongo Servers
+      service_description     MongoDB Database index size your-database
+      check_command           check_mongodb_collection!collection_indexes!27017!50!100!your-database!your-collection
 }
 </code></pre>
 
