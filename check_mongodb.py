@@ -252,8 +252,8 @@ def main(argv):
 
 def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, replica=None):
     try:
-        # ssl connection for pymongo > 2.1
-        if pymongo.version >= "2.1":
+        # ssl connection for pymongo > 2.3
+        if pymongo.version >= "2.3":
             if replica is None:
                 con = pymongo.MongoClient(host, port)
             else:
