@@ -144,6 +144,7 @@ def main(argv):
     p.add_option('-q', '--querytype', action='store', dest='query_type', default='query', help='The query type to check [query|insert|update|delete|getmore|command] from queries_per_second')
     p.add_option('-c', '--collection', action='store', dest='collection', default='admin', help='Specify the collection to check')
     p.add_option('-T', '--time', action='store', type='int', dest='sample_time', default=1, help='Time used to sample number of pages faults')
+    p.add_option('-R', '--retries', action='store', type='int', dest='retries', default=1, help='Number of retries for a check. Currently only for check_collection_state')
 
     options, arguments = p.parse_args()
     host = options.host
@@ -153,6 +154,7 @@ def main(argv):
     query_type = options.query_type
     collection = options.collection
     sample_time = options.sample_time
+    retries = options.retries
     if (options.action == 'replset_state'):
         warning = str(options.warning or "")
         critical = str(options.critical or "")
@@ -243,7 +245,7 @@ def main(argv):
     elif action == "connect_primary":
         return check_connect_primary(con, warning, critical, perf_data)
     elif action == "collection_state":
-        return check_collection_state(con, database, collection)
+        return check_collection_state(con, database, collection, retries)
     elif action == "row_count":
         return check_row_count(con, database, collection, warning, critical, perf_data)
     else:
@@ -1271,14 +1273,17 @@ def check_connect_primary(con, warning, critical, perf_data):
         return exit_with_general_critical(e)
 
 
-def check_collection_state(con, database, collection):
-    try:
-        con[database][collection].find_one()
-        print "OK - Collection %s.%s is reachable " % (database, collection)
-        return 0
+def check_collection_state(con, database, collection, retries):
+    ex = None
+    for r in range(0, retries):
+        try:
+            con[database][collection].find_one()
+            print "OK - Collection %s.%s is reachable " % (database, collection)
+            return 0
 
-    except Exception, e:
-        return exit_with_general_critical(e)
+        except Exception, e:
+            ex = e
+    return exit_with_general_critical(ex)
 
 
 def check_row_count(con, database, collection, warning, critical, perf_data):
