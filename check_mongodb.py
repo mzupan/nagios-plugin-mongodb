@@ -176,7 +176,7 @@ def main(argv):
     # moving the login up here and passing in the connection
     #
     start = time.time()
-    err, con = mongo_connect(host, port, ssl, user, passwd, replicaset)
+    err, con = mongo_connect(host, port, ssl, user, passwd, replicaset, database)
     if err != 0:
         return err
 
@@ -250,12 +250,12 @@ def main(argv):
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
 
-def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, replica=None):
+def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, replica=None, database=None):
     try:
         # ssl connection for pymongo > 2.3
         if pymongo.version >= "2.3":
             if replica is None:
-                con = pymongo.MongoClient(host, port, ssl=ssl, network_timeout=10)
+                con = pymongo.Connection(host, port, ssl=ssl, network_timeout=10)
             else:
                 con = pymongo.Connection(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl, replicaSet=replica, network_timeout=10)
         else:
@@ -266,7 +266,7 @@ def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, repli
                 #con = pymongo.Connection(host, port, slave_okay=True, replicaSet=replica, network_timeout=10)
 
         if user and passwd:
-            db = con["admin"]
+            db = con[database]
             if not db.authenticate(user, passwd):
                 sys.exit("Username/Password incorrect")
     except Exception, e:
