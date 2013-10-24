@@ -247,7 +247,7 @@ def main(argv):
     elif action == "connect_primary":
         return check_connect_primary(con, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "collection_state":
-        return check_collection_state(con, database, collection, options.ignore_connection_issues)
+        return check_collection_state(con, database, collection, options.ignore_connection_issues, pymongo.read_preferences.ReadPreference.SECONDARY_PREFERRED)
     elif action == "row_count":
         return check_row_count(con, database, collection, warning, critical, perf_data, options.ignore_connection_issues)
     else:
@@ -1389,9 +1389,11 @@ def check_connect_primary(con, warning, critical, perf_data, ignore_connection_i
         return exit_with_general_critical(e)
 
 
-def check_collection_state(con, database, collection, ignore_connection_issues):
+def check_collection_state(con, database, collection, ignore_connection_issues, read_preference = pymongo.read_preferences.ReadPreference.PRIMARY):
     try:
-        con[database][collection].find_one()
+        coll = con[database][collection]
+        coll.read_preference = read_preference
+        coll.find_one()
         print "OK - Collection %s.%s is reachable " % (database, collection)
         return 0
 
