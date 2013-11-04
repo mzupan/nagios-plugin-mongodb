@@ -133,7 +133,7 @@ def main(argv):
                  choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'memory_mapped', 'lock',
                           'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_indexes', 'collection_indexes',
                           'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary', 'page_faults',
-                          'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count'])
+                          'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count', 'collection_indexes_exist'])
     p.add_option('--max-lag', action='store_true', dest='max_lag', default=False, help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory', action='store_true', dest='mapped_memory', default=False, help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -154,7 +154,7 @@ def main(argv):
     query_type = options.query_type
     collection = options.collection
     sample_time = options.sample_time
-    if (options.action == 'replset_state'):
+    if (options.action == 'replset_state' or options.action == 'collection_indexes_exist'):
         warning = str(options.warning or "")
         critical = str(options.critical or "")
     else:
@@ -250,6 +250,8 @@ def main(argv):
         return check_collection_state(con, database, collection, options.ignore_connection_issues, pymongo.read_preferences.ReadPreference.SECONDARY_PREFERRED)
     elif action == "row_count":
         return check_row_count(con, database, collection, warning, critical, perf_data, options.ignore_connection_issues)
+    elif action == "collection_indexes_exist":
+        return check_collection_indexes_exist(con, database, collection, warning, critical, perf_data, options.ignore_connection_issues)
     else:
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time, options.ignore_connection_issues)
 
@@ -908,6 +910,41 @@ def check_collection_indexes(con, database, collection, warning, critical, perf_
             return 1
         else:
             print "OK - %s.%s totalIndexSize: %.0f MB %s" % (database, collection, total_index_size, perfdata)
+            return 0
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
+    except Exception, e:
+        return exit_with_general_critical(e)
+
+
+def check_collection_indexes_exist(con, database, collection, warning, critical, perf_data, ignore_connection_issues):
+    #
+    # Thresholds are comma-separated lists of required-index names.
+    # This check considers it ok to have more indexes than required, and will
+    # only complain if some indexes are missing.
+    #
+    perfdata = ""
+    warning_indexes = set([ s.strip() for s in warning.split(',') ] if warning != "" else [])
+    critical_indexes = set([ s.strip() for s in critical.split(',') ] if critical != "" else [])
+    try:
+        set_read_preference(con)
+        actual_indexes = set(con[database][collection].index_information().keys())
+        missing_critical = critical_indexes - actual_indexes
+        missing_warning = warning_indexes - actual_indexes
+        if perf_data:
+            perfdata += " | collection_indexes=%s;%s;%s" % (','.join(actual_indexes), warning, critical)
+
+        if len(missing_critical) != 0:
+            print "CRITICAL - %s.%s missing index(es): %s %s" % (database, collection, ','.join(missing_critical), perfdata)
+            return 2
+        elif len(missing_warning) != 0:
+            print "WARNING - %s.%s missing index(es): %s %s" % (database, collection, ','.join(missing_warning), perfdata)
+            return 1
+        else:
+            print "OK - %s.%s all indexes are present %s" % (database, collection, perf_data)
             return 0
     except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
         if ignore_connection_issues:
