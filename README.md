@@ -264,6 +264,21 @@ define service {
 
 
 
+#### Check the existence of some indexes in a collection
+This will check the existence of the provided list of indexes in a collection. Missing indexes will impact badly 
+the performance of your queries. Replace your-database with the name of your database, your-collection with the name
+of your collection, your-recommended-indexes and your-required-indexes by the list of index names you want to check.
+<pre><code>
+define service {
+      use                     generic-service
+      hostgroup_name          Mongo Servers
+      service_description     MongoDB Database index existence your-database
+      check_command           check_mongodb_collection!collections_indexes_exist!27017!your-recommended-indexes!your-required-indexes!your-database!your-collection
+}
+</code></pre>
+
+
+
 #### Check the primary server of replicaset
 This will check the primary server of a replicaset. This is useful for catching unexpected stepdowns of the replica's primary server.
 Replace your-replicaset with the name of your replicaset
