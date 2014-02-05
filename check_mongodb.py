@@ -144,6 +144,7 @@ def main(argv):
     p.add_option('-q', '--querytype', action='store', dest='query_type', default='query', help='The query type to check [query|insert|update|delete|getmore|command] from queries_per_second')
     p.add_option('-c', '--collection', action='store', dest='collection', default='admin', help='Specify the collection to check')
     p.add_option('-T', '--time', action='store', type='int', dest='sample_time', default=1, help='Time used to sample number of pages faults')
+    p.add_option('-I', '--ignore-connection-issues', action='store_true', dest='ignore_connection_issues', default=False, help='Raise unknown (3) status on connection issue')
 
     options, arguments = p.parse_args()
     host = options.host
@@ -178,76 +179,79 @@ def main(argv):
     start = time.time()
     err, con = mongo_connect(host, port, ssl, user, passwd, replicaset)
     if err != 0:
-        return err
+        if options.ignore_connection_issues:
+            return exit_with_general_unknown(err, False)
+        else:
+            return err
 
     conn_time = time.time() - start
     conn_time = round(conn_time, 0)
 
     if action == "connections":
-        return check_connections(con, warning, critical, perf_data)
+        return check_connections(con, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "replication_lag":
-        return check_rep_lag(con, host, port, warning, critical, False, perf_data, max_lag, user, passwd)
+        return check_rep_lag(con, host, port, warning, critical, False, perf_data, max_lag, user, passwd, options.ignore_connection_issues)
     elif action == "replication_lag_percent":
-        return check_rep_lag(con, host, port, warning, critical, True, perf_data, max_lag, user, passwd)
+        return check_rep_lag(con, host, port, warning, critical, True, perf_data, max_lag, user, passwd, options.ignore_connection_issues)
     elif action == "replset_state":
-        return check_replset_state(con, perf_data, warning, critical)
+        return check_replset_state(con, perf_data, warning, critical, options.ignore_connection_issues)
     elif action == "memory":
-        return check_memory(con, warning, critical, perf_data, options.mapped_memory)
+        return check_memory(con, warning, critical, perf_data, options.mapped_memory, options.ignore_connection_issues)
     elif action == "memory_mapped":
-        return check_memory_mapped(con, warning, critical, perf_data)
+        return check_memory_mapped(con, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "queues":
-        return check_queues(con, warning, critical, perf_data)
+        return check_queues(con, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "lock":
-        return check_lock(con, warning, critical, perf_data)
+        return check_lock(con, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "current_lock":
-        return check_current_lock(con, host, warning, critical, perf_data)
+        return check_current_lock(con, host, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "flushing":
-        return check_flushing(con, warning, critical, True, perf_data)
+        return check_flushing(con, warning, critical, True, perf_data, options.ignore_connection_issues)
     elif action == "last_flush_time":
-        return check_flushing(con, warning, critical, False, perf_data)
+        return check_flushing(con, warning, critical, False, perf_data, options.ignore_connection_issues)
     elif action == "index_miss_ratio":
-        index_miss_ratio(con, warning, critical, perf_data)
+        index_miss_ratio(con, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "databases":
-        return check_databases(con, warning, critical, perf_data)
+        return check_databases(con, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "collections":
-        return check_collections(con, warning, critical, perf_data)
+        return check_collections(con, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "oplog":
-        return check_oplog(con, warning, critical, perf_data)
+        return check_oplog(con, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "journal_commits_in_wl":
-        return check_journal_commits_in_wl(con, warning, critical, perf_data)
+        return check_journal_commits_in_wl(con, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "database_size":
         if options.all_databases:
-            return check_all_databases_size(con, warning, critical, perf_data)
+            return check_all_databases_size(con, warning, critical, perf_data, options.ignore_connection_issues)
         else:
-            return check_database_size(con, database, warning, critical, perf_data)
+            return check_database_size(con, database, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "database_indexes":
-        return check_database_indexes(con, database, warning, critical, perf_data)
+        return check_database_indexes(con, database, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "collection_indexes":
-        return check_collection_indexes(con, database, collection, warning, critical, perf_data)
+        return check_collection_indexes(con, database, collection, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "journaled":
-        return check_journaled(con, warning, critical, perf_data)
+        return check_journaled(con, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "write_data_files":
-        return check_write_to_datafiles(con, warning, critical, perf_data)
+        return check_write_to_datafiles(con, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "opcounters":
-        return check_opcounters(con, host, warning, critical, perf_data)
+        return check_opcounters(con, host, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "asserts":
-        return check_asserts(con, host, warning, critical, perf_data)
+        return check_asserts(con, host, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "replica_primary":
-        return check_replica_primary(con, host, warning, critical, perf_data, replicaset)
+        return check_replica_primary(con, host, warning, critical, perf_data, replicaset, options.ignore_connection_issues)
     elif action == "queries_per_second":
-        return check_queries_per_second(con, query_type, warning, critical, perf_data)
+        return check_queries_per_second(con, query_type, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "page_faults":
-        check_page_faults(con, sample_time, warning, critical, perf_data)
+        check_page_faults(con, sample_time, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "chunks_balance":
-        chunks_balance(con, database, collection, warning, critical)
+        chunks_balance(con, database, collection, warning, critical, options.ignore_connection_issues)
     elif action == "connect_primary":
-        return check_connect_primary(con, warning, critical, perf_data)
+        return check_connect_primary(con, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "collection_state":
-        return check_collection_state(con, database, collection)
+        return check_collection_state(con, database, collection, options.ignore_connection_issues)
     elif action == "row_count":
-        return check_row_count(con, database, collection, warning, critical, perf_data)
+        return check_row_count(con, database, collection, warning, critical, perf_data, options.ignore_connection_issues)
     else:
-        return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
+        return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time, options.ignore_connection_issues)
 
 
 def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, replica=None):
@@ -278,6 +282,10 @@ def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, repli
         return exit_with_general_critical(e), None
     return 0, con
 
+def exit_with_general_unknown(e, do_print = True):
+    if do_print:
+        print "UNKNOWN : ",e
+    return 3
 
 def exit_with_general_warning(e):
     if isinstance(e, SystemExit):
@@ -300,7 +308,7 @@ def set_read_preference(db):
         db.read_preference = pymongo.ReadPreference.SECONDARY
 
 
-def check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time):
+def check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time, ignore_connection_issues):
     warning = warning or 3
     critical = critical or 6
     message = "Connection took %i seconds" % conn_time
@@ -309,7 +317,7 @@ def check_connect(host, port, warning, critical, perf_data, user, passwd, conn_t
     return check_levels(conn_time, warning, critical, message)
 
 
-def check_connections(con, warning, critical, perf_data):
+def check_connections(con, warning, critical, perf_data, ignore_connection_issues):
     warning = warning or 80
     critical = critical or 95
     try:
@@ -325,11 +333,16 @@ def check_connections(con, warning, critical, perf_data):
                 (available, "available_connections")])
         return check_levels(used_percent, warning, critical, message)
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_lag, user, passwd):
+def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_lag, user, passwd, ignore_connection_issues):
     # Use actual hostname to find replica set member when connecting locally
     if "127.0.0.1" == host:
         host = socket.gethostname()
@@ -490,11 +503,16 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
                 message += performance_data(perf_data, [(lag, "replication_lag", warning, critical)])
             return check_levels(lag, warning, critical, message)
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_memory(con, warning, critical, perf_data, mapped_memory):
+def check_memory(con, warning, critical, perf_data, mapped_memory, ignore_connection_issues):
     #
     # These thresholds are basically meaningless, and must be customized to your system's ram
     #
@@ -540,11 +558,16 @@ def check_memory(con, warning, critical, perf_data, mapped_memory):
         else:
             return check_levels(mem_resident, warning, critical, message)
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_memory_mapped(con, warning, critical, perf_data):
+def check_memory_mapped(con, warning, critical, perf_data, ignore_connection_issues):
     #
     # These thresholds are basically meaningless, and must be customized to your application
     #
@@ -578,11 +601,16 @@ def check_memory_mapped(con, warning, critical, perf_data):
             print "OK - Server does not provide mem.mapped info"
             return 0
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_lock(con, warning, critical, perf_data):
+def check_lock(con, warning, critical, perf_data, ignore_connection_issues):
     warning = warning or 10
     critical = critical or 30
     try:
@@ -595,11 +623,16 @@ def check_lock(con, warning, critical, perf_data):
         message += performance_data(perf_data, [("%.2f" % lock_percentage, "lock_percentage", warning, critical)])
         return check_levels(lock_percentage, warning, critical, message)
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_flushing(con, warning, critical, avg, perf_data):
+def check_flushing(con, warning, critical, avg, perf_data, ignore_connection_issues):
     #
     # These thresholds mean it's taking 5 seconds to perform a background flush to issue a warning
     # and 10 seconds to issue a critical.
@@ -620,11 +653,16 @@ def check_flushing(con, warning, critical, avg, perf_data):
 
         return check_levels(flush_time, warning, critical, message)
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def index_miss_ratio(con, warning, critical, perf_data):
+def index_miss_ratio(con, warning, critical, perf_data, ignore_connection_issues):
     warning = warning or 10
     critical = critical or 30
     try:
@@ -650,11 +688,16 @@ def index_miss_ratio(con, warning, critical, perf_data):
 
         return check_levels(miss_ratio, warning, critical, message)
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_replset_state(con, perf_data, warning="", critical=""):
+def check_replset_state(con, perf_data, warning="", critical="", ignore_connection_issues = False):
     try:
         warning = [int(x) for x in warning.split(",")]
     except:
@@ -699,11 +742,16 @@ def check_replset_state(con, perf_data, warning="", critical=""):
             message = "State: %i (Unknown state)" % state
         message += performance_data(perf_data, [(state, "state")])
         return check_levels(state, warning, critical, message, ok)
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_databases(con, warning, critical, perf_data=None):
+def check_databases(con, warning, critical, perf_data=None, ignore_connection_issues = False):
     try:
         try:
             set_read_preference(con.admin)
@@ -715,11 +763,16 @@ def check_databases(con, warning, critical, perf_data=None):
         message = "Number of DBs: %.0f" % count
         message += performance_data(perf_data, [(count, "databases", warning, critical, message)])
         return check_levels(count, warning, critical, message)
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_collections(con, warning, critical, perf_data=None):
+def check_collections(con, warning, critical, perf_data=None, ignore_connection_issues = False):
     try:
         try:
             set_read_preference(con.admin)
@@ -737,11 +790,16 @@ def check_collections(con, warning, critical, perf_data=None):
         message += performance_data(perf_data, [(count, "collections", warning, critical, message)])
         return check_levels(count, warning, critical, message)
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_all_databases_size(con, warning, critical, perf_data):
+def check_all_databases_size(con, warning, critical, perf_data, ignore_connection_issues):
     warning = warning or 100
     critical = critical or 1000
     try:
@@ -767,7 +825,7 @@ def check_all_databases_size(con, warning, critical, perf_data):
     return check_levels(total_storage_size, warning, critical, message)
 
 
-def check_database_size(con, database, warning, critical, perf_data):
+def check_database_size(con, database, warning, critical, perf_data, ignore_connection_issues):
     warning = warning or 100
     critical = critical or 1000
     perfdata = ""
@@ -788,11 +846,16 @@ def check_database_size(con, database, warning, critical, perf_data):
         else:
             print "OK - Database size: %.0f MB, Database: %s%s" % (storage_size, database, perfdata)
             return 0
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_database_indexes(con, database, warning, critical, perf_data):
+def check_database_indexes(con, database, warning, critical, perf_data, ignore_connection_issues):
     #
     # These thresholds are basically meaningless, and must be customized to your application
     #
@@ -815,11 +878,16 @@ def check_database_indexes(con, database, warning, critical, perf_data):
         else:
             print "OK - %s indexSize: %.0f MB %s" % (database, index_size, perfdata)
             return 0
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_collection_indexes(con, database, collection, warning, critical, perf_data):
+def check_collection_indexes(con, database, collection, warning, critical, perf_data, ignore_connection_issues):
     #
     # These thresholds are basically meaningless, and must be customized to your application
     #
@@ -842,11 +910,16 @@ def check_collection_indexes(con, database, collection, warning, critical, perf_
         else:
             print "OK - %s.%s totalIndexSize: %.0f MB %s" % (database, collection, total_index_size, perfdata)
             return 0
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_queues(con, warning, critical, perf_data):
+def check_queues(con, warning, critical, perf_data, ignore_connection_issues):
     warning = warning or 10
     critical = critical or 30
     try:
@@ -859,11 +932,16 @@ def check_queues(con, warning, critical, perf_data):
         message += performance_data(perf_data, [(total_queues, "total_queues", warning, critical), (readers_queues, "readers_queues"), (writers_queues, "writers_queues")])
         return check_levels(total_queues, warning, critical, message)
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_queries_per_second(con, query_type, warning, critical, perf_data):
+def check_queries_per_second(con, query_type, warning, critical, perf_data, ignore_connection_issues):
     warning = warning or 250
     critical = critical or 500
 
@@ -906,11 +984,16 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data):
 
         return check_levels(query_per_sec, warning, critical, message)
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_oplog(con, warning, critical, perf_data):
+def check_oplog(con, warning, critical, perf_data, ignore_connection_issues):
     """ Checking the oplog time - the time of the log currntly saved in the oplog collection
     defaults:
         critical 4 hours
@@ -953,11 +1036,16 @@ def check_oplog(con, warning, critical, perf_data):
         message += performance_data(perf_data, [("%.2f" % hours_in_oplog, 'oplog_time', warning, critical), ("%.2f " % approx_level, 'oplog_time_100_percent_used')])
         return check_levels(-approx_level, -warning, -critical, message)
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_journal_commits_in_wl(con, warning, critical, perf_data):
+def check_journal_commits_in_wl(con, warning, critical, perf_data, ignore_connection_issues):
     """  Checking the number of commits which occurred in the db's write lock.
 Most commits are performed outside of this lock; committed while in the write lock is undesirable.
 Under very high write situations it is normal for this value to be nonzero.  """
@@ -971,11 +1059,16 @@ Under very high write situations it is normal for this value to be nonzero.  """
         message += performance_data(perf_data, [(j_commits_in_wl, "j_commits_in_wl", warning, critical)])
         return check_levels(j_commits_in_wl, warning, critical, message)
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_journaled(con, warning, critical, perf_data):
+def check_journaled(con, warning, critical, perf_data, ignore_connection_issues):
     """ Checking the average amount of data in megabytes written to the recovery log in the last four seconds"""
 
     warning = warning or 20
@@ -987,11 +1080,16 @@ def check_journaled(con, warning, critical, perf_data):
         message += performance_data(perf_data, [("%.2f" % journaled, "journaled", warning, critical)])
         return check_levels(journaled, warning, critical, message)
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_write_to_datafiles(con, warning, critical, perf_data):
+def check_write_to_datafiles(con, warning, critical, perf_data, ignore_connection_issues):
     """    Checking the average amount of data in megabytes written to the databases datafiles in the last four seconds.
 As these writes are already journaled, they can occur lazily, and thus the number indicated here may be lower
 than the amount physically written to disk."""
@@ -1004,6 +1102,11 @@ than the amount physically written to disk."""
         message += performance_data(perf_data, [("%.2f" % writes, "write_to_data_files", warning, critical)])
         return check_levels(writes, warning, critical, message)
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
@@ -1023,7 +1126,7 @@ def get_opcounters(data, opcounters_name, host):
     return  maintain_delta(new_vals, host, opcounters_name)
 
 
-def check_opcounters(con, host, warning, critical, perf_data):
+def check_opcounters(con, host, warning, critical, perf_data, ignore_connection_issues):
     """ A function to get all opcounters delta per minute. In case of a replication - gets the opcounters+opcountersRepl"""
     warning = warning or 10000
     critical = critical or 15000
@@ -1045,7 +1148,7 @@ def check_opcounters(con, host, warning, critical, perf_data):
         return exit_with_general_critical("problem reading data from temp file")
 
 
-def check_current_lock(con, host, warning, critical, perf_data):
+def check_current_lock(con, host, warning, critical, perf_data, ignore_connection_issues):
     """ A function to get current lock percentage and not a global one, as check_lock function does"""
     warning = warning or 10
     critical = critical or 30
@@ -1064,7 +1167,7 @@ def check_current_lock(con, host, warning, critical, perf_data):
         return exit_with_general_warning("problem reading data from temp file")
 
 
-def check_page_faults(con, host, warning, critical, perf_data):
+def check_page_faults(con, host, warning, critical, perf_data, ignore_connection_issues):
     """ A function to get page_faults per second from the system"""
     warning = warning or 10
     critical = critical or 30
@@ -1086,7 +1189,7 @@ def check_page_faults(con, host, warning, critical, perf_data):
         return exit_with_general_warning("problem reading data from temp file")
 
 
-def check_asserts(con, host, warning, critical, perf_data):
+def check_asserts(con, host, warning, critical, perf_data, ignore_connection_issues):
     """ A function to get asserts from the system"""
     warning = warning or 1
     critical = critical or 10
@@ -1135,7 +1238,7 @@ def get_stored_primary_server_name(db):
     return stored_primary_server
 
 
-def check_replica_primary(con, host, warning, critical, perf_data, replicaset):
+def check_replica_primary(con, host, warning, critical, perf_data, replicaset, ignore_connection_issues):
     """ A function to check if the primary server of a replica set has changed """
     if warning is None and critical is None:
         warning = 1
@@ -1164,7 +1267,7 @@ def check_replica_primary(con, host, warning, critical, perf_data, replicaset):
     return check_levels(primary_status, warning, critical, message)
 
 
-def check_page_faults(con, sample_time, warning, critical, perf_data):
+def check_page_faults(con, sample_time, warning, critical, perf_data, ignore_connection_issues):
     warning = warning or 10
     critical = critical or 20
     try:
@@ -1190,11 +1293,16 @@ def check_page_faults(con, sample_time, warning, critical, perf_data):
         message += performance_data(perf_data, [(page_faults, "page_faults", warning, critical)])
         check_levels(page_faults, warning, critical, message)
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         exit_with_general_critical(e)
 
 
-def chunks_balance(con, database, collection, warning, critical):
+def chunks_balance(con, database, collection, warning, critical, ignore_connection_issues):
     warning = warning or 10
     critical = critical or 20
     nsfilter = database + "." + collection
@@ -1231,6 +1339,11 @@ def chunks_balance(con, database, collection, warning, critical):
         print "OK - Chunks well balanced across shards"
         sys.exit(0)
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         exit_with_general_critical(e)
 
@@ -1238,7 +1351,7 @@ def chunks_balance(con, database, collection, warning, critical):
     sys.exit(0)
 
 
-def check_connect_primary(con, warning, critical, perf_data):
+def check_connect_primary(con, warning, critical, perf_data, ignore_connection_issues):
     warning = warning or 3
     critical = critical or 6
 
@@ -1268,21 +1381,31 @@ def check_connect_primary(con, warning, critical, perf_data):
 
         return check_levels(pconn_time, warning, critical, message)
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_collection_state(con, database, collection):
+def check_collection_state(con, database, collection, ignore_connection_issues):
     try:
         con[database][collection].find_one()
         print "OK - Collection %s.%s is reachable " % (database, collection)
         return 0
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
 
-def check_row_count(con, database, collection, warning, critical, perf_data):
+def check_row_count(con, database, collection, warning, critical, perf_data, ignore_connection_issues):
     try:
         count = con[database][collection].count()
         message = "Row count: %i" % (count)
@@ -1290,6 +1413,11 @@ def check_row_count(con, database, collection, warning, critical, perf_data):
 
         return check_levels(count, warning, critical, message)
 
+    except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
+        if ignore_connection_issues:
+            return exit_with_general_unknown(e)
+        else:
+            return exit_with_general_critical(e)
     except Exception, e:
         return exit_with_general_critical(e)
 
