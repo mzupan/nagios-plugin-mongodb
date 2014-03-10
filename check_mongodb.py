@@ -28,7 +28,6 @@ import optparse
 import textwrap
 import re
 import os
-import socket
 
 try:
     import pymongo
@@ -330,9 +329,9 @@ def check_connections(con, warning, critical, perf_data):
 
 
 def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_lag, user, passwd):
-    # Use actual hostname to find replica set member when connecting locally
+    # Get mongo to tell us replica set member name when connecting locally
     if "127.0.0.1" == host:
-        host = socket.gethostname()
+        host = con.admin.command("ismaster","1")["me"].split(':')[0]
 
     if percent:
         warning = warning or 50
