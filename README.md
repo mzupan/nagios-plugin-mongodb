@@ -14,6 +14,7 @@ This is a simple Nagios check script to monitor your MongoDB server(s).
  - Shlomo Priymak <shlomoid -(at)- gmail.com>
  - @jhoff909 on github
  - Dag Stockstad <dag.stockstad -(at)- gmail.com>
+ - pecharmin on github supported by Babiel GmbH <a.pech -(at)- babiel.com>
 
 ## Installation
 
@@ -46,6 +47,11 @@ define command {
 define command {
     command_name    check_mongodb_replicaset
     command_line    $USER1$/nagios-plugin-mongodb/check_mongodb.py -H $HOSTADDRESS$ -A $ARG1$ -P $ARG2$ -W $ARG3$ -C $ARG4$ -r $ARG5$
+}
+
+define command {
+    command_name    check_mongodb_replicaset_node
+    command_line    $USER1$/nagios-plugin-mongodb/check_mongodb.py -H $HOSTADDRESS$ -A $ARG1$ -P $ARG2$ -W $ARG3$ -C $ARG4$ -r $ARG5$ -N $ARG6$
 }
 
 define command {
@@ -275,6 +281,22 @@ define service {
       check_command           check_mongodb_replicaset!replica_primary!27017!0!1!your-replicaset
 }
 </code></pre>
+
+
+If you want to check the current primary instance of a replicaset against a persistent node endpoint string (replicaset member config), you might want to use the following service check.
+Replace your-replicaset with the name of your replicaset.
+Replace your-primary-node-name:port with the node's name/IP address and instance port of your typical primary server as it was defined with rs.conf().
+Use 0 and 1 for warning and critical thresholds to recieve an alert when either the defined instance is not the primary node or a secondary instance gets elected as the primary node.
+Use 1 and 2 for warning and critical if you only want to recieve an alert if your typical primary node is now a secondary/not master. With this threshold configuration you only get warnings if a secondary becomes the primary node of your replicaset.
+<pre><code>
+define service {
+      use                     generic-service
+      hostgroup_name          Mongo Servers
+      service_description     MongoDB Replicaset Primary Node: your-replicaset
+      check_command           check_mongodb_replicaset_node!replica_primary!27017!0!1!your-replicaset!your-primary-node-name:port
+}
+</code></pre>
+
 
 
 #### Check the number of queries per second
