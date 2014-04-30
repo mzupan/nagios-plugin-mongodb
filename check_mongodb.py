@@ -69,9 +69,9 @@ def performance_data(perf_data, params):
                 warning = warning or 0
                 critical = critical or 0
                 data += ";%s;%s" % (warning, critical)
-                
+
             data += " "
-            
+
     return data
 
 
@@ -1368,8 +1368,8 @@ def replication_get_time_diff(con):
     ol = local.system.namespaces.find_one({"name": "local.oplog.$main"})
     if ol:
         col = 'oplog.$main'
-    firstc = local[col].find().sort("$natural", 1).limit(1)
-    lastc = local[col].find().sort("$natural", -1).limit(1)
+    firstc = local[col].find(fields = ["ts"]).sort("$natural", 1).limit(1)
+    lastc = local[col].find(fields = ["ts"]).sort("$natural", -1).limit(1)
     first = firstc.next()
     last = lastc.next()
     tfirst = first["ts"]
