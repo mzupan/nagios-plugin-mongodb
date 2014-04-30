@@ -940,8 +940,8 @@ def check_oplog(con, warning, critical, perf_data):
         ol_storage_size = data['storageSize']
         ol_used_storage = int(float(ol_size) / ol_storage_size * 100 + 1)
         ol = con.local[oplog]
-        firstc = ol.find().sort("$natural", pymongo.ASCENDING).limit(1)[0]['ts']
-        lastc = ol.find().sort("$natural", pymongo.DESCENDING).limit(1)[0]['ts']
+        firstc = ol.find(fields=["ts"]).sort("$natural", pymongo.ASCENDING).limit(1)[0]['ts']
+        lastc = ol.find(fields=["ts"]).sort("$natural", pymongo.DESCENDING).limit(1)[0]['ts']
         time_in_oplog = (lastc.as_datetime() - firstc.as_datetime())
         message = "Oplog saves " + str(time_in_oplog) + " %d%% used" % ol_used_storage
         try:  # work starting from python2.7
