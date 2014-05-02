@@ -1319,7 +1319,10 @@ def check_currentops(con, warning, critical, perf_data=None):
             print "WARNING - " + str(warnings) + " ops found running longer than " + str(warning) + " -- " + message
             return 1
         else:
-            print "OK - No active current opertions"
+            if count == 0:
+                print "OK - No active current opertions"
+            else:
+                print "OK - " + str(count) + " active current operations"
             return 0
 
     except Exception, e:
