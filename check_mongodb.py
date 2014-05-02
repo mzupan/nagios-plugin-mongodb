@@ -16,6 +16,7 @@
 #   - @jbraeuer on github
 #   - Dag Stockstad <dag.stockstad@gmail.com>
 #   - @Andor on github
+#   - Erik Kristensen <erik@erikkristensen.com>
 #
 # USAGE
 #
