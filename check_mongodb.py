@@ -1300,28 +1300,27 @@ def check_currentops(con, warning, critical, perf_data=None):
     critical = critical or 30
     warnings = 0
     criticals = 0
+    message = ''
 
     try:
         data = con.database.current_op()
         count = len(data['inprog'])
 
-        if count == 0:
-            print "OK - No current active operations"
-            return 0
-        else:
-            for op in data['inprog']:
-                if (op['secs_running'] >= warning or op['secs_running'] >= critical):
-                    warnings += 1
-                    criticals += 1
-                    message += op['opid']
+        for op in data['inprog']:
+            if op.get('secs_running') and (op['secs_running'] >= warning or op['secs_running'] >= critical):
+                warnings += 1
+                criticals += 1
+                message += str(op['opid'])
 
-        if (criticals > 0):
-            print "CRITICAL - " + criticals + " ops found running longer then " + critical + " -- " + message
+        if (criticals > critical):
+            print "CRITICAL - " + str(criticals) + " ops found running longer then " + str(critical) + " -- " + message
             return 2
-
-        if (warning > 0):
-            print "WARNING - " + warnings + " ops found running longer than " + warning + " -- " + message
+        elif (warning > warning):
+            print "WARNING - " + str(warnings) + " ops found running longer than " + str(warning) + " -- " + message
             return 1
+        else:
+            print "OK - No active current opertions"
+            return 0
 
     except Exception, e:
         return exit_with_general_critical(e)
