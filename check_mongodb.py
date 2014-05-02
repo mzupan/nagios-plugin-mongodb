@@ -16,6 +16,7 @@
 #   - @jbraeuer on github
 #   - Dag Stockstad <dag.stockstad@gmail.com>
 #   - @Andor on github
+#   - Erik Kristensen <erik@erikkristensen.com>
 #
 # USAGE
 #
@@ -132,7 +133,7 @@ def main(argv):
                  choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'memory_mapped', 'lock',
                           'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_indexes', 'collection_indexes',
                           'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary', 'page_faults',
-                          'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count'])
+                          'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count', 'current_ops'])
     p.add_option('--max-lag', action='store_true', dest='max_lag', default=False, help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory', action='store_true', dest='mapped_memory', default=False, help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -245,6 +246,8 @@ def main(argv):
         return check_collection_state(con, database, collection)
     elif action == "row_count":
         return check_row_count(con, database, collection, warning, critical, perf_data)
+    elif action == "current_ops":
+        return check_currentops(con, warning, critical, perf_data)
     else:
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
@@ -1293,6 +1296,40 @@ def check_row_count(con, database, collection, warning, critical, perf_data):
         return exit_with_general_critical(e)
 
 
+def check_currentops(con, warning, critical, perf_data=None):
+    warning = warning or 15
+    critical = critical or 30
+    warnings = 0
+    criticals = 0
+    message = ''
+
+    try:
+        data = con.database.current_op()
+        count = len(data['inprog'])
+
+        for op in data['inprog']:
+            if op.get('secs_running') and (op['secs_running'] >= warning or op['secs_running'] >= critical):
+                warnings += 1
+                criticals += 1
+                message += str(op['opid'])
+
+        if (criticals > critical):
+            print "CRITICAL - " + str(criticals) + " ops found running longer then " + str(critical) + " -- " + message
+            return 2
+        elif (warning > warning):
+            print "WARNING - " + str(warnings) + " ops found running longer than " + str(warning) + " -- " + message
+            return 1
+        else:
+            if count == 0:
+                print "OK - No active current opertions"
+            else:
+                print "OK - " + str(count) + " active current operations"
+            return 0
+
+    except Exception, e:
+        return exit_with_general_critical(e)
+
+
 def build_file_name(host, action):
     #done this way so it will work when run independently and from shell
     module_name = re.match('(.*//*)*(.*)\..*', __file__).group(2)
@@ -1376,6 +1413,7 @@ def replication_get_time_diff(con):
     tlast = last["ts"]
     delta = tlast.time - tfirst.time
     return delta
+
 
 #
 # main app
