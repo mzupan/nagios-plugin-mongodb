@@ -1357,6 +1357,15 @@ def chunks_balance(con, database, collection, warning, critical, ignore_connecti
             print "WARNING - Namespace %s is not sharded" % (nsfilter)
             sys.exit(1)
 
+        # these are the migration thresholds
+        # set starting from 2.2
+        if nscount < 20:
+            mindelta = 2
+        elif nscount < 80:
+            mindelta = 4
+        else:
+            mindelta = 8
+
         avgchunksnb = nscount / len(shards)
         warningnb = avgchunksnb * warning / 100
         criticalnb = avgchunksnb * critical / 100
@@ -1365,10 +1374,10 @@ def chunks_balance(con, database, collection, warning, critical, ignore_connecti
             delta = abs(avgchunksnb - col.find({"ns": nsfilter, "shard": shard}).count())
             message = "Namespace: %s, Shard name: %s, Chunk delta: %i" % (nsfilter, shard, delta)
 
-            if delta >= criticalnb and delta > 0:
+            if delta >= criticalnb and delta > mindelta:
                 print "CRITICAL - Chunks not well balanced " + message
                 sys.exit(2)
-            elif delta >= warningnb  and delta > 0:
+            elif delta >= warningnb  and delta > mindelta:
                 print "WARNING - Chunks not well balanced  " + message
                 sys.exit(1)
 
