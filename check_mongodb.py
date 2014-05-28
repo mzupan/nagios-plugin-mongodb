@@ -145,6 +145,7 @@ def main(argv):
     p.add_option('-c', '--collection', action='store', dest='collection', default='admin', help='Specify the collection to check')
     p.add_option('-T', '--time', action='store', type='int', dest='sample_time', default=1, help='Time used to sample number of pages faults')
     p.add_option('-I', '--ignore-connection-issues', action='store_true', dest='ignore_connection_issues', default=False, help='Raise unknown (3) status on connection issue')
+    p.add_option('--timeout', action='store', type='int', dest='timeout', default=None, help='Timeout on mongo connection in milliseconds')
 
     options, arguments = p.parse_args()
     host = options.host
@@ -167,6 +168,9 @@ def main(argv):
     database = options.database
     ssl = options.ssl
     replicaset = options.replicaset
+    timeout = options.timeout
+    if timeout == 0:
+        timeout = None
 
     if action == 'replica_primary' and replicaset is None:
         return "replicaset must be passed in when using replica_primary check"
@@ -177,7 +181,7 @@ def main(argv):
     # moving the login up here and passing in the connection
     #
     start = time.time()
-    err, con = mongo_connect(host, port, ssl, user, passwd, replicaset)
+    err, con = mongo_connect(host, port, ssl, user, passwd, replicaset, timeout)
     if err != 0:
         if options.ignore_connection_issues:
             return exit_with_general_unknown(err, False)
@@ -190,9 +194,9 @@ def main(argv):
     if action == "connections":
         return check_connections(con, warning, critical, perf_data, options.ignore_connection_issues)
     elif action == "replication_lag":
-        return check_rep_lag(con, host, port, warning, critical, False, perf_data, max_lag, user, passwd, options.ignore_connection_issues)
+        return check_rep_lag(con, host, port, warning, critical, False, perf_data, max_lag, user, passwd, options.ignore_connection_issues, timeout)
     elif action == "replication_lag_percent":
-        return check_rep_lag(con, host, port, warning, critical, True, perf_data, max_lag, user, passwd, options.ignore_connection_issues)
+        return check_rep_lag(con, host, port, warning, critical, True, perf_data, max_lag, user, passwd, options.ignore_connection_issues, timeout)
     elif action == "replset_state":
         return check_replset_state(con, perf_data, warning, critical, options.ignore_connection_issues)
     elif action == "memory":
@@ -245,7 +249,7 @@ def main(argv):
     elif action == "chunks_balance":
         chunks_balance(con, database, collection, warning, critical, options.ignore_connection_issues)
     elif action == "connect_primary":
-        return check_connect_primary(con, warning, critical, perf_data, options.ignore_connection_issues)
+        return check_connect_primary(con, warning, critical, perf_data, options.ignore_connection_issues, timeout)
     elif action == "collection_state":
         return check_collection_state(con, database, collection, options.ignore_connection_issues, pymongo.read_preferences.ReadPreference.SECONDARY_PREFERRED)
     elif action == "row_count":
@@ -256,19 +260,19 @@ def main(argv):
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time, options.ignore_connection_issues)
 
 
-def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, replica=None):
+def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, replica=None, timeout=None):
     try:
         # ssl connection for pymongo > 2.3
         if pymongo.version >= "2.3":
             if replica is None:
-                con = pymongo.MongoClient(host, port)
+                con = pymongo.MongoClient(host, port, connectTimeoutMS=timeout, socketTimeoutMS=timeout)
             else:
-                con = pymongo.Connection(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl, replicaSet=replica, network_timeout=10)
+                con = pymongo.Connection(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl, replicaSet=replica, network_timeout=10, connectTimeoutMS=timeout, socketTimeoutMS=timeout)
         else:
             if replica is None:
-                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
+                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10, connectTimeoutMS=timeout, socketTimeoutMS=timeout)
             else:
-                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
+                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10, connectTimeoutMS=timeout, socketTimeoutMS=timeout)
                 #con = pymongo.Connection(host, port, slave_okay=True, replicaSet=replica, network_timeout=10)
 
         if user and passwd:
@@ -344,7 +348,7 @@ def check_connections(con, warning, critical, perf_data, ignore_connection_issue
         return exit_with_general_critical(e)
 
 
-def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_lag, user, passwd, ignore_connection_issues):
+def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_lag, user, passwd, ignore_connection_issues, timeout):
     # Use actual hostname to find replica set member when connecting locally
     if "127.0.0.1" == host:
         host = socket.gethostname()
@@ -417,7 +421,7 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
                             data = data + member['name'] + " lag=%d;" % replicationLag
                             maximal_lag = max(maximal_lag, replicationLag)
                     if percent:
-                        err, con = mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]), False, user, passwd)
+                        err, con = mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]), False, user, passwd, timeout=timeout)
                         if err != 0:
                             return err
                         primary_timediff = replication_get_time_diff(con)
@@ -449,7 +453,7 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
                 lag = float(optime_lag.seconds + optime_lag.days * 24 * 3600)
 
             if percent:
-                err, con = mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]), False, user, passwd)
+                err, con = mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]), False, user, passwd, timeout=timeout)
                 if err != 0:
                     return err
                 primary_timediff = replication_get_time_diff(con)
@@ -493,7 +497,7 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
             optime_lag = abs(primary_node[1] - host_node["optimeDate"])
             lag = optime_lag.seconds
             if percent:
-                err, con = mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]))
+                err, con = mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]), timeout=timeout)
                 if err != 0:
                     return err
                 primary_timediff = replication_get_time_diff(con)
@@ -927,8 +931,14 @@ def check_collection_indexes_exist(con, database, collection, warning, critical,
     # only complain if some indexes are missing.
     #
     perfdata = ""
-    warning_indexes = set([ s.strip() for s in warning.split(',') ] if warning != "" else [])
-    critical_indexes = set([ s.strip() for s in critical.split(',') ] if critical != "" else [])
+    if warning != "":
+        warning_indexes = set([ s.strip() for s in warning.split(',') ])
+    else:
+        warning_indexes = set([])
+    if critical != "":
+        critical_indexes = set([ s.strip() for s in critical.split(',') ])
+    else:
+        critical_indexes = set([])
     try:
         set_read_preference(con)
         actual_indexes = set(con[database][collection].index_information().keys())
@@ -944,7 +954,7 @@ def check_collection_indexes_exist(con, database, collection, warning, critical,
             print "WARNING - %s.%s missing index(es): %s %s" % (database, collection, ','.join(missing_warning), perfdata)
             return 1
         else:
-            print "OK - %s.%s all indexes are present %s" % (database, collection, perf_data)
+            print "OK - %s.%s all indexes are present %s" % (database, collection, perfdata)
             return 0
     except (pymongo.errors.TimeoutError,pymongo.errors.ConnectionFailure), e:
         if ignore_connection_issues:
@@ -1396,7 +1406,7 @@ def chunks_balance(con, database, collection, warning, critical, ignore_connecti
     sys.exit(0)
 
 
-def check_connect_primary(con, warning, critical, perf_data, ignore_connection_issues):
+def check_connect_primary(con, warning, critical, perf_data, ignore_connection_issues, timeout):
     warning = warning or 3
     critical = critical or 6
 
@@ -1415,7 +1425,7 @@ def check_connect_primary(con, warning, critical, perf_data, ignore_connection_i
         pport = int(data['primary'].split(':')[1])
         start = time.time()
 
-        err, con = mongo_connect(phost, pport)
+        err, con = mongo_connect(phost, pport, timeout=timeout)
         if err != 0:
             return err
 
