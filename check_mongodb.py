@@ -681,7 +681,7 @@ def check_replset_quorum(con, perf_data):
         return exit_with_general_critical(e)
 
 
-def check_replset_ping(con, warning=50, critical=100, perf_data):
+def check_replset_ping(con, warning=50, critical=100, perf_data=None):
     db = con['admin']
     highest_ping = 0
 
