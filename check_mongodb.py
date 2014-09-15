@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 #
 # A MongoDB Nagios check script
@@ -8,7 +8,7 @@
 #
 # Main Author
 #   - Mike Zupan <mike@zcentric.com>
-# Contributers
+# Contributors
 #   - Frank Brandewiede <brande@travel-iq.com> <brande@bfiw.de> <brande@novolab.de>
 #   - Sam Perman <sam@brightcove.com>
 #   - Shlomo Priymak <shlomoid@gmail.com>
@@ -16,6 +16,7 @@
 #   - @jbraeuer on github
 #   - Dag Stockstad <dag.stockstad@gmail.com>
 #   - @Andor on github
+#   - pecharmin on github supported by Babiel GmbH <a.pech -(at)- babiel.com>
 #
 # USAGE
 #
@@ -140,6 +141,7 @@ def main(argv):
     p.add_option('--all-databases', action='store_true', dest='all_databases', default=False, help='Check all databases (action database_size)')
     p.add_option('-s', '--ssl', dest='ssl', default=False, action='callback', callback=optional_arg(True), help='Connect using SSL')
     p.add_option('-r', '--replicaset', dest='replicaset', default=None, action='callback', callback=optional_arg(True), help='Connect to replicaset')
+    p.add_option('-N', '--node', dest='node', default=None, action='callback', callback=optional_arg(True), help='Define node of a replicaset: <server>:<port>')
     p.add_option('-q', '--querytype', action='store', dest='query_type', default='query', help='The query type to check [query|insert|update|delete|getmore|command] from queries_per_second')
     p.add_option('-c', '--collection', action='store', dest='collection', default='admin', help='Specify the collection to check')
     p.add_option('-T', '--time', action='store', type='int', dest='sample_time', default=1, help='Time used to sample number of pages faults')
@@ -165,6 +167,7 @@ def main(argv):
     database = options.database
     ssl = options.ssl
     replicaset = options.replicaset
+    node = options.node
 
     if action == 'replica_primary' and replicaset is None:
         return "replicaset must be passed in when using replica_primary check"
@@ -234,7 +237,7 @@ def main(argv):
     elif action == "asserts":
         return check_asserts(con, host, warning, critical, perf_data)
     elif action == "replica_primary":
-        return check_replica_primary(con, host, warning, critical, perf_data, replicaset)
+        return check_replica_primary(con, host, warning, critical, perf_data, replicaset, node)
     elif action == "queries_per_second":
         return check_queries_per_second(con, query_type, warning, critical, perf_data)
     elif action == "page_faults":
@@ -1185,8 +1188,8 @@ def get_stored_primary_server_name(db):
     return stored_primary_server
 
 
-def check_replica_primary(con, host, warning, critical, perf_data, replicaset):
-    """ A function to check if the primary server of a replica set has changed """
+def check_replica_primary(con, host, warning, critical, perf_data, replicaset, expected_primary_node):
+    """ A function to check if the primary server of a replica set has changed or is not the expected one """
     if warning is None and critical is None:
         warning = 1
     warning = warning or 2
@@ -1201,16 +1204,26 @@ def check_replica_primary(con, host, warning, critical, perf_data, replicaset):
         primary_status = 2
         return check_levels(primary_status, warning, critical, message)
     current_primary = data['repl'].get('primary')
-    saved_primary = get_stored_primary_server_name(db)
-    if current_primary is None:
-        current_primary = "None"
-    if saved_primary is None:
-        saved_primary = "None"
-    if current_primary != saved_primary:
-        last_primary_server_record = {"server": current_primary}
-        db.last_primary_server.update({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True, safe=True)
-        message = "Primary server has changed from %s to %s" % (saved_primary, current_primary)
-        primary_status = 1
+    if expected_primary_node is not None:
+        if current_primary != expected_primary_node:
+	    message = "Primary node is not server '%s', it's currently '%s'" % (expected_primary_node, current_primary)
+            if data['repl'].get('me') == expected_primary_node:
+                primary_status = 2
+            else:
+                primary_status = 1
+        else:
+            message = "Primary node is server '%s'" % current_primary
+    else:
+        saved_primary = get_stored_primary_server_name(db)
+        if current_primary is None:
+            current_primary = "None"
+        if saved_primary is None:
+            saved_primary = "None"
+        if current_primary != saved_primary:
+            last_primary_server_record = {"server": current_primary}
+            db.last_primary_server.update({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True, safe=True)
+            message = "Primary server has changed from %s to %s" % (saved_primary, current_primary)
+            primary_status = 1
     return check_levels(primary_status, warning, critical, message)
 
 
