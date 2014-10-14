@@ -166,8 +166,14 @@ def main(argv):
     ssl = options.ssl
     replicaset = options.replicaset
 
-    if action == 'replica_primary' and replicaset is None:
-        return "replicaset must be passed in when using replica_primary check"
+    if action == 'replica_primary':
+        err_f, con_f = mongo_connect(host, port, ssl, user, passwd)
+        if err_f != 0:
+            return err_f
+        if not replicaset:
+            replicaset = con_f.admin.command("replSetGetStatus")['set']
+        if not replicaset:
+            return "replicaset must be passed in when using replica_primary check"
     elif not action == 'replica_primary' and replicaset:
         return "passing a replicaset while not checking replica_primary does not work"
 
