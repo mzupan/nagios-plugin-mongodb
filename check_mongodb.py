@@ -593,7 +593,12 @@ def check_lock(con, warning, critical, perf_data):
         #
         # calculate percentage
         #
-        lock_percentage = float(data['globalLock']['lockTime']) / float(data['globalLock']['totalTime']) * 100
+        lockTime = data['globalLock']['lockTime']
+        totalTime = data['globalLock']['totalTime']
+        if lockTime > totalTime:
+            lock_percentage = 0.00
+        else:
+            lock_percentage = float(lockTime) / float(totalTime) * 100
         message = "Lock Percentage: %.2f%%" % lock_percentage
         message += performance_data(perf_data, [("%.2f" % lock_percentage, "lock_percentage", warning, critical)])
         return check_levels(lock_percentage, warning, critical, message)
