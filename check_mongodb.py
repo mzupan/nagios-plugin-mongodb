@@ -17,6 +17,7 @@
 #   - Dag Stockstad <dag.stockstad@gmail.com>
 #   - @Andor on github
 #   - Steven Richards - Captainkrtek on github
+#   - Max Vernimmen
 #
 # USAGE
 #
@@ -502,8 +503,22 @@ def check_memory(con, warning, critical, perf_data, mapped_memory):
     #
     # These thresholds are basically meaningless, and must be customized to your system's ram
     #
-    warning = warning or 8
-    critical = critical or 16
+
+    # Get the total system merory and calculate based on that how much memory used by Mongodb is ok or not.
+    meminfo = open('/proc/meminfo').read()
+    matched = re.search(r'^MemTotal:\s+(\d+)', meminfo)
+    if matched: 
+        mem_total_kB = int(matched.groups()[0])
+
+    # Old way
+    #critical = critical or 16
+    # The new way. if using >80% then warn, if >90% then critical level
+    warning = warning or (mem_total_kB * 0.8) / 1024.0 / 1024.0
+    critical = critical or (mem_total_kB * 0.9) / 1024.0 / 1024.0
+
+    # debugging
+    #print "mem total: {0}kb, warn: {1}GB, crit: {2}GB".format(mem_total_kB,warning, critical)
+
     try:
         data = get_server_status(con)
         if not data['mem']['supported'] and not mapped_memory:
