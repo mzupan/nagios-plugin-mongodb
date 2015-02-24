@@ -25,16 +25,12 @@
 # See the README.md
 #
 
-
 import sys
 import time
-import datetime
 import optparse
 import textwrap
 import re
 import os
-import commands
-from boto.ec2.cloudwatch import CloudWatchConnection
 
 try:
     import pymongo
@@ -92,10 +88,13 @@ def numeric_type(param):
 #autoscaling. The dimensions we select here when publishing
 #must be matched later by our autoscale policy
 def get_instance_id():
+    import commands
     ret, instanceId = commands.getstatusoutput("wget -q -O - http://169.254.169.254/latest/meta-data/instance-id")
     return instanceId
 
 def put_data(namespace, name, value, unit, dimensions):
+    import datetime
+    from boto.ec2.cloudwatch import CloudWatchConnection
     c = CloudWatchConnection()
     now = datetime.datetime.now()
     c.put_metric_data(namespace, name, value, now, unit, dimensions)
