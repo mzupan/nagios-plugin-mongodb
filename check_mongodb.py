@@ -377,7 +377,7 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
             for member in rs_status["members"]:
                 if member["stateStr"] == "PRIMARY":
                     primary_node = member
-                if member["name"].split(':')[0] == host and int(member["name"].split(':')[1]) == port:
+                if member.get('self') == True:
                     host_node = member
 
             # Check if we're in the middle of an election and don't have a primary
