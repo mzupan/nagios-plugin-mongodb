@@ -32,7 +32,7 @@ import socket
 
 try:
     import pymongo
-    import ssl
+    from ssl import CERT_NONE
 except ImportError, e:
     print e
     sys.exit(2)
@@ -256,11 +256,11 @@ def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, repli
         # ssl connection for pymongo > 2.3
         if pymongo.version >= "2.3":
             if replica is None:
-                con = pymongo.MongoClient(host, port, ssl=ssl, ssl_cert_reqs=ssl.CERT_NONE)
+                con = pymongo.MongoClient(host, port, ssl=ssl, ssl_cert_reqs=CERT_NONE)
             else:
                 con = pymongo.Connection(host, port,
                         read_preference=pymongo.ReadPreference.SECONDARY,
-                        ssl=ssl, ssl_cert_reqs=ssl.CERT_NONE, replicaSet=replica, network_timeout=10)
+                        ssl=ssl, ssl_cert_reqs=CERT_NONE, replicaSet=replica, network_timeout=10)
         else:
             if replica is None:
                 con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
