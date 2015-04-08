@@ -114,10 +114,10 @@ def check_levels(param, warning, critical, message, ok=[]):
 
 def get_server_status(con):
     try:
-        set_read_preference(con.admin)
-        data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
+        admin = set_read_preference(con.admin)
+        data = admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
     except:
-        data = con.admin.command(son.SON([('serverStatus', 1)]))
+        data = admin.command(son.SON([('serverStatus', 1)]))
     return data
 
 
@@ -299,8 +299,11 @@ def exit_with_general_critical(e):
 
 
 def set_read_preference(db):
-    if pymongo.version >= "2.1":
+    if pymongo.version >= "3.0":
+        return db.client.get_database(db.name, read_preference=pymongo.ReadPreference.SECONDARY)
+    elif pymongo.version >= "2.1":
         db.read_preference = pymongo.ReadPreference.SECONDARY
+        return db
 
 
 def check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time):
@@ -346,11 +349,11 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
     rs_status = {}
     slaveDelays = {}
     try:
-        set_read_preference(con.admin)
+        admin = set_read_preference(con.admin)
 
         # Get replica set status
         try:
-            rs_status = con.admin.command("replSetGetStatus")
+            rs_status = admin.command("replSetGetStatus")
         except pymongo.errors.OperationFailure, e:
             if e.code == None and str(e).find('failed: not running with --replSet"'):
                 print "OK - Not running with replSet"
@@ -456,7 +459,7 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
             # less than 2.0 check
             #
             # Get replica set status
-            rs_status = con.admin.command("replSetGetStatus")
+            rs_status = admin.command("replSetGetStatus")
 
             # Find the primary and/or the current node
             primary_node = None
@@ -671,10 +674,10 @@ def check_replset_state(con, perf_data, warning="", critical=""):
     try:
         try:
             try:
-                set_read_preference(con.admin)
-                data = con.admin.command(pymongo.son_manipulator.SON([('replSetGetStatus', 1)]))
+                admin = set_read_preference(con.admin)
+                data = admin.command(pymongo.son_manipulator.SON([('replSetGetStatus', 1)]))
             except:
-                data = con.admin.command(son.SON([('replSetGetStatus', 1)]))
+                data = admin.command(son.SON([('replSetGetStatus', 1)]))
             state = int(data['myState'])
         except pymongo.errors.OperationFailure, e:
             if e.code == None and str(e).find('failed: not running with --replSet"'):
@@ -709,10 +712,10 @@ def check_replset_state(con, perf_data, warning="", critical=""):
 def check_databases(con, warning, critical, perf_data=None):
     try:
         try:
-            set_read_preference(con.admin)
-            data = con.admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
+            admin = set_read_preference(con.admin)
+            data = admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
         except:
-            data = con.admin.command(son.SON([('listDatabases', 1)]))
+            data = admin.command(son.SON([('listDatabases', 1)]))
 
         count = len(data['databases'])
         message = "Number of DBs: %.0f" % count
@@ -725,15 +728,15 @@ def check_databases(con, warning, critical, perf_data=None):
 def check_collections(con, warning, critical, perf_data=None):
     try:
         try:
-            set_read_preference(con.admin)
-            data = con.admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
+            admin = set_read_preference(con.admin)
+            data = admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
         except:
-            data = con.admin.command(son.SON([('listDatabases', 1)]))
+            data = admin.command(son.SON([('listDatabases', 1)]))
 
         count = 0
         for db in data['databases']:
             dbase = con[db['name']]
-            set_read_preference(dbase)
+            dbase = set_read_preference(dbase)
             count += len(dbase.collection_names())
 
         message = "Number of collections: %.0f" % count
@@ -748,10 +751,10 @@ def check_all_databases_size(con, warning, critical, perf_data):
     warning = warning or 100
     critical = critical or 1000
     try:
-        set_read_preference(con.admin)
-        all_dbs_data = con.admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
+        admin = set_read_preference(con.admin)
+        all_dbs_data = admin.command(pymongo.son_manipulator.SON([('listDatabases', 1)]))
     except:
-        all_dbs_data = con.admin.command(son.SON([('listDatabases', 1)]))
+        all_dbs_data = admin.command(son.SON([('listDatabases', 1)]))
 
     total_storage_size = 0
     message = ""
@@ -775,7 +778,7 @@ def check_database_size(con, database, warning, critical, perf_data):
     critical = critical or 1000
     perfdata = ""
     try:
-        set_read_preference(con.admin)
+        admin = set_read_preference(con.admin)
         data = con[database].command('dbstats')
         storage_size = data['storageSize'] / 1024 / 1024
         if perf_data:
@@ -803,7 +806,7 @@ def check_database_indexes(con, database, warning, critical, perf_data):
     critical = critical or 1000
     perfdata = ""
     try:
-        set_read_preference(con.admin)
+        admin = set_read_preference(con.admin)
         data = con[database].command('dbstats')
         index_size = data['indexSize'] / 1024 / 1024
         if perf_data:
@@ -830,7 +833,7 @@ def check_collection_indexes(con, database, collection, warning, critical, perf_
     critical = critical or 1000
     perfdata = ""
     try:
-        set_read_preference(con.admin)
+        admin = set_read_preference(con.admin)
         data = con[database].command('collstats', collection)
         total_index_size = data['totalIndexSize'] / 1024 / 1024
         if perf_data:
@@ -935,10 +938,10 @@ def check_oplog(con, warning, critical, perf_data):
                 return check_levels(None, warning, critical, message)
 
         try:
-                set_read_preference(con.admin)
+                admin = set_read_preference(con.admin)
                 data = con.local.command(pymongo.son_manipulator.SON([('collstats', oplog)]))
         except:
-                data = con.admin.command(son.SON([('collstats', oplog)]))
+                data = admin.command(son.SON([('collstats', oplog)]))
 
         ol_size = data['size']
         ol_storage_size = data['storageSize']
@@ -1172,14 +1175,14 @@ def check_page_faults(con, sample_time, warning, critical, perf_data):
     critical = critical or 20
     try:
         try:
-            set_read_preference(con.admin)
-            data1 = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
+            admin = set_read_preference(con.admin)
+            data1 = admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
             time.sleep(sample_time)
-            data2 = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
+            data2 = admin.command(pymongo.son_manipulator.SON([('serverStatus', 1)]))
         except:
-            data1 = con.admin.command(son.SON([('serverStatus', 1)]))
+            data1 = admin.command(son.SON([('serverStatus', 1)]))
             time.sleep(sample_time)
-            data2 = con.admin.command(son.SON([('serverStatus', 1)]))
+            data2 = admin.command(son.SON([('serverStatus', 1)]))
 
         try:
             #on linux servers only
@@ -1203,7 +1206,7 @@ def chunks_balance(con, database, collection, warning, critical):
     nsfilter = database + "." + collection
     try:
         try:
-            set_read_preference(con.admin)
+            admin = set_read_preference(con.admin)
             col = con.config.chunks
             nscount = col.find({"ns": nsfilter}).count()
             shards = col.distinct("shard")
@@ -1247,10 +1250,10 @@ def check_connect_primary(con, warning, critical, perf_data):
 
     try:
         try:
-            set_read_preference(con.admin)
-            data = con.admin.command(pymongo.son_manipulator.SON([('isMaster', 1)]))
+            admin = set_read_preference(con.admin)
+            data = admin.command(pymongo.son_manipulator.SON([('isMaster', 1)]))
         except:
-            data = con.admin.command(son.SON([('isMaster', 1)]))
+            data = admin.command(son.SON([('isMaster', 1)]))
 
         if data['ismaster'] == True:
             print "OK - This server is primary"
