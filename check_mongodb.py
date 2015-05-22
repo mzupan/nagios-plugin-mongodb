@@ -589,7 +589,7 @@ def check_memory_mapped(con, warning, critical, perf_data):
             message += " %.2fGB mappedWithJournal" % mem_mapped_journal
         except:
             mem_mapped_journal = 0
-        message += performance_data(perf_data, [("%.2f" % mem_mapped, "memory_mapped"), ("%.2f" % mem_mapped_journal, "mappedWithJournal")])
+        message += performance_data(perf_data, [("%.2f" % mem_mapped, "memory_mapped", warning, critical), ("%.2f" % mem_mapped_journal, "mappedWithJournal")])
 
         if not mem_mapped == -1:
             return check_levels(mem_mapped, warning, critical, message)
