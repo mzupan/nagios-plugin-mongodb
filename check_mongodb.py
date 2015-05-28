@@ -18,6 +18,7 @@
 #   - @Andor on github
 #   - Steven Richards - Captainkrtek on github
 #   - Max Vernimmen
+#   - @heuri on github
 #
 # USAGE
 #
@@ -134,7 +135,7 @@ def main(argv):
                  choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'memory_mapped', 'lock',
                           'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_indexes', 'collection_indexes', 'collection_size',
                           'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary', 'page_faults',
-                          'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count', 'replset_quorum'])
+                          'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count', 'replset_quorum', 'slavelag'])
     p.add_option('--max-lag', action='store_true', dest='max_lag', default=False, help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory', action='store_true', dest='mapped_memory', default=False, help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -251,6 +252,8 @@ def main(argv):
         return check_row_count(con, database, collection, warning, critical, perf_data)
     elif action == "replset_quorum":
         return check_replset_quorum(con, perf_data)
+    elif action == "slavelag":
+        return check_slavelag(con, warning, critical)
     else:
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
@@ -1234,6 +1237,29 @@ def check_replica_primary(con, host, warning, critical, perf_data, replicaset):
         primary_status = 1
     return check_levels(primary_status, warning, critical, message)
 
+def check_slavelag(con, warning, critical):
+    warning = warning or 30
+    critical = critical or 60
+
+    try:
+        try:
+          set_read_preference(con.admin)
+          data = con.admin.command(pymongo.son_manipulator.SON([('serverStatus', 1), ('repl', 2)]))
+        except:
+          data = con.admin.command(son.SON([('serverStatus', 1), ('repl', 2)]))
+
+        try:
+          seconds = int(data['repl']['sources'][0]['lagSeconds'])
+          master = data['repl']['sources'][0]['host']
+        except (KeyError, IndexError):
+          raise Exception("Missing lagSeconds-Value, not running with --slave?")
+
+        message = "Master Slave Replication " + str(seconds) + " secs behind '" + master + "' (master)."
+
+        return check_levels(seconds, warning, critical, message)
+
+    except Exception, e:
+        return exit_with_general_critical(e)
 
 def check_page_faults(con, sample_time, warning, critical, perf_data):
     warning = warning or 10
