@@ -18,6 +18,7 @@
 #   - @Andor on github
 #   - Steven Richards - Captainkrtek on github
 #   - Max Vernimmen
+#   - @burdandrei Added CloudWatch monitoring for Mongodb
 #
 # USAGE
 #
@@ -44,6 +45,7 @@ if pymongo.version >= "1.9":
 else:
     import pymongo.son as son
 
+cloudwatch_report = False
 
 #
 # thanks to http://stackoverflow.com/a/1229667/72987
@@ -82,6 +84,20 @@ def numeric_type(param):
         return True
     return False
 
+#Get the instanceId for our machine. This is important later for
+#autoscaling. The dimensions we select here when publishing
+#must be matched later by our autoscale policy
+def get_instance_id():
+    import commands
+    ret, instanceId = commands.getstatusoutput("wget -q -O - http://169.254.169.254/latest/meta-data/instance-id")
+    return instanceId
+
+def put_data(namespace, name, value, unit, dimensions):
+    import datetime
+    from boto.ec2.cloudwatch import CloudWatchConnection
+    c = CloudWatchConnection()
+    now = datetime.datetime.now()
+    c.put_metric_data(namespace, name, value, now, unit, dimensions)
 
 def check_levels(param, warning, critical, message, ok=[]):
     if (numeric_type(critical) and numeric_type(warning)):
@@ -145,6 +161,7 @@ def main(argv):
     p.add_option('-q', '--querytype', action='store', dest='query_type', default='query', help='The query type to check [query|insert|update|delete|getmore|command] from queries_per_second')
     p.add_option('-c', '--collection', action='store', dest='collection', default='admin', help='Specify the collection to check')
     p.add_option('-T', '--time', action='store', type='int', dest='sample_time', default=1, help='Time used to sample number of pages faults')
+    p.add_option('--cloudwatch-report', action='store_true', dest='cloudwatch_report', default=False,help='Report sampled data to cloudwatch')
 
     options, arguments = p.parse_args()
     host = options.host
@@ -167,6 +184,8 @@ def main(argv):
     database = options.database
     ssl = options.ssl
     replicaset = options.replicaset
+    global cloudwatch_report
+    cloudwatch_report = options.cloudwatch_report
 
     if action == 'replica_primary' and replicaset is None:
         return "replicaset must be passed in when using replica_primary check"
@@ -438,6 +457,12 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
             except:
                 lag = float(optime_lag.seconds + optime_lag.days * 24 * 3600)
 
+            if cloudwatch_report:
+                replicaset = rs_status["set"]
+                instanceId = get_instance_id()
+                put_data('Mongo', 'replicationLag', lag, 'Seconds',{'replicaSet': replicaset})
+                put_data('Mongo', 'replicationLag', lag, 'Seconds',{'InstanceId': instanceId, 'replicaSet': replicaset})
+
             if percent:
                 err, con = mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]), False, user, passwd)
                 if err != 0:
@@ -617,6 +642,11 @@ def check_lock(con, warning, critical, perf_data):
             lock_percentage = float(lockTime) / float(totalTime) * 100
         message = "Lock Percentage: %.2f%%" % lock_percentage
         message += performance_data(perf_data, [("%.2f" % lock_percentage, "lock_percentage", warning, critical)])
+        if cloudwatch_report:
+            instanceId = get_instance_id()
+            replicaset = data['repl']['setName']
+            put_data('Mongo', 'LockPercentage', lock_percentage, 'Percent',{'replicaSet': replicaset})
+            put_data('Mongo', 'LockPercentage', lock_percentage, 'Percent',{'InstanceId': instanceId, 'replicaSet': replicaset})
         return check_levels(lock_percentage, warning, critical, message)
 
     except Exception, e:
@@ -1130,6 +1160,11 @@ def check_current_lock(con, host, warning, critical, perf_data):
         lock_percentage = delta[2] / delta[1] * 100     # lockTime/totalTime*100
         message = "Current Lock Percentage: %.2f%%" % lock_percentage
         message += performance_data(perf_data, [("%.2f" % lock_percentage, "current_lock_percentage", warning, critical)])
+        if cloudwatch_report:
+            instanceId = get_instance_id()
+            replicaset = data['repl']['setName']
+            put_data('Mongo', 'CurrentLockPercentage', lock_percentage, 'Percent',{'replicaSet': replicaset})
+            put_data('Mongo', 'CurrentLockPercentage', lock_percentage, 'Percent',{'InstanceId': instanceId, 'replicaSet': replicaset})
         return check_levels(lock_percentage, warning, critical, message)
     else:
         return exit_with_general_warning("problem reading data from temp file")
