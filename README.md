@@ -15,6 +15,10 @@ This is a simple Nagios check script to monitor your MongoDB server(s).
  - @jhoff909 on github
  - Dag Stockstad <dag.stockstad -(at)- gmail.com>
 
+## Requirements
+
+To use this script you need Python >=2.6 and pymongo.
+
 ## Installation
 
 In your Nagios plugins directory run
