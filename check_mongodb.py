@@ -145,6 +145,7 @@ def main(argv):
     p.add_option('-q', '--querytype', action='store', dest='query_type', default='query', help='The query type to check [query|insert|update|delete|getmore|command] from queries_per_second')
     p.add_option('-c', '--collection', action='store', dest='collection', default='admin', help='Specify the collection to check')
     p.add_option('-T', '--time', action='store', type='int', dest='sample_time', default=1, help='Time used to sample number of pages faults')
+    p.add_option('-f', '--credentialfile', action='store', type='string', dest='credential_file', default=None, help='yaml file with user and passwd')
 
     options, arguments = p.parse_args()
     host = options.host
@@ -160,6 +161,14 @@ def main(argv):
     else:
         warning = float(options.warning or 0)
         critical = float(options.critical or 0)
+
+    if (options.credential_file):
+        import yaml
+        f = open(options.credential_file)
+        credentials=yaml.safe_load(f)
+        f.close
+        user = credentials['user']
+        passwd = credentials['passwd']
 
     action = options.action
     perf_data = options.perf_data
