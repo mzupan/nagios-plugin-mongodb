@@ -357,7 +357,7 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
         try:
             rs_status = con.admin.command("replSetGetStatus")
         except pymongo.errors.OperationFailure, e:
-            if e.code == None and str(e).find('failed: not running with --replSet"'):
+            if ((e.code == None and str(e).find('failed: not running with --replSet"')) or (e.code == 76 and str(e).find('not running with --replSet"'))):
                 print "OK - Not running with replSet"
                 return 0
 
@@ -741,7 +741,7 @@ def check_replset_state(con, perf_data, warning="", critical=""):
                 data = con.admin.command(son.SON([('replSetGetStatus', 1)]))
             state = int(data['myState'])
         except pymongo.errors.OperationFailure, e:
-            if e.code == None and str(e).find('failed: not running with --replSet"'):
+            if ((e.code == None and str(e).find('failed: not running with --replSet"')) or (e.code == 76 and str(e).find('not running with --replSet"'))):
                 state = -1
 
         if state == 8:
