@@ -340,6 +340,10 @@ def check_connections(con, warning, critical, perf_data):
 def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_lag, user, passwd):
     # Get mongo to tell us replica set member name when connecting locally
     if "127.0.0.1" == host:
+        if not "me" in con.admin.command("ismaster","1").keys():
+            print "OK - This is not replicated MongoDB"
+            sys.exit(3)        
+
         host = con.admin.command("ismaster","1")["me"].split(':')[0]
 
     if percent:
