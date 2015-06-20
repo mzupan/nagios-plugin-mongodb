@@ -45,6 +45,9 @@ else:
     import pymongo.son as son
 
 
+# should we check warn/crit thresholds for >= or <= ?. extremly useful for size checks
+lower_check = False
+
 #
 # thanks to http://stackoverflow.com/a/1229667/72987
 #
@@ -84,11 +87,12 @@ def numeric_type(param):
 
 
 def check_levels(param, warning, critical, message, ok=[]):
+    global lower_check
     if (numeric_type(critical) and numeric_type(warning)):
-        if param >= critical:
+        if lower_check != bool (param >= critical):
             print "CRITICAL - " + message
             sys.exit(2)
-        elif param >= warning:
+        elif lower_check != bool (param >= warning):
             print "WARNING - " + message
             sys.exit(1)
         else:
@@ -128,6 +132,7 @@ def main(argv):
     p.add_option('-P', '--port', action='store', type='int', dest='port', default=27017, help='The port mongodb is runnung on')
     p.add_option('-u', '--user', action='store', type='string', dest='user', default=None, help='The username you want to login as')
     p.add_option('-p', '--pass', action='store', type='string', dest='passwd', default=None, help='The password you want to use for that user')
+    p.add_option('-L', '--lower-check', action='store_true', dest='lower_check', default=False, help='Thresholds trigger warning/critical if value is lower')
     p.add_option('-W', '--warning', action='store', dest='warning', default=None, help='The warning threshold we want to set')
     p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold we want to set')
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
@@ -164,6 +169,8 @@ def main(argv):
         critical = float(options.critical or 0)
 
     action = options.action
+    global lower_check
+    lower_check = options.lower_check
     perf_data = options.perf_data
     max_lag = options.max_lag
     mongo_version = options.mongo_version
