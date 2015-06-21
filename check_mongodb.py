@@ -134,7 +134,7 @@ def main(argv):
                  choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'memory_mapped', 'lock',
                           'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_indexes', 'collection_indexes', 'collection_size',
                           'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary', 'page_faults',
-                          'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count', 'replset_quorum'])
+                          'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count', 'replset_quorum', 'replset_ping'])
     p.add_option('--max-lag', action='store_true', dest='max_lag', default=False, help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory', action='store_true', dest='mapped_memory', default=False, help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -254,6 +254,8 @@ def main(argv):
         return check_row_count(con, database, collection, warning, critical, perf_data)
     elif action == "replset_quorum":
         return check_replset_quorum(con, perf_data)
+    elif action == "replset_ping":
+        return check_replset_ping(con, warning, critical, perf_data)
     else:
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
@@ -723,6 +725,28 @@ def check_replset_quorum(con, perf_data):
     except Exception, e:
         return exit_with_general_critical(e)
 
+
+def check_replset_ping(con, warning=50, critical=100, perf_data=None):
+    db = con['admin']
+    highest_ping = 0
+
+    try:
+        rs_members = db.command("replSetGetStatus")['members']
+
+        for member in rs_members:
+            if member.has_key('pingMs'):
+                ping = member['pingMs']
+            else:
+                ping = 0
+
+            if ping > highest_ping:
+                highest_ping = ping
+
+        message = "Highest ping is %d" % highest_ping
+
+        return check_levels(highest_ping, warning, critical, message)
+    except Exception, e:
+        return exit_with_general_critical(e)
 
 
 def check_replset_state(con, perf_data, warning="", critical=""):
