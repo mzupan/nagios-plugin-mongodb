@@ -655,7 +655,11 @@ def check_flushing(con, warning, critical, avg, perf_data):
     critical = critical or 15000
     try:
         data = get_server_status(con)
-        if not data['storageEngine']['name'] == 'wiredTiger':
+        if 'storageEngine' in data and data['storageEngine']['name'] == 'wiredTiger':
+            print "FAIL - StorageEngine WiredTiger doesn't have backgroundFlushing"
+            return 1
+
+        else:
             if avg:
                 flush_time = float(data['backgroundFlushing']['average_ms'])
                 stat_type = "Average"
@@ -667,10 +671,6 @@ def check_flushing(con, warning, critical, avg, perf_data):
             message += performance_data(perf_data, [("%.2fms" % flush_time, "%s_flush_time" % stat_type.lower(), warning, critical)])
 
             return check_levels(flush_time, warning, critical, message)
-
-        else:
-            print "FAIL - StorageEngine WiredTiger doesn't have backgroundFlushing"
-            return 1
 
     except Exception, e:
         return exit_with_general_critical(e)
