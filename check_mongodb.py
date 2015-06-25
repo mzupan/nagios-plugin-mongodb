@@ -145,8 +145,6 @@ def main(argv):
     p.add_option('-q', '--querytype', action='store', dest='query_type', default='query', help='The query type to check [query|insert|update|delete|getmore|command] from queries_per_second')
     p.add_option('-c', '--collection', action='store', dest='collection', default='admin', help='Specify the collection to check')
     p.add_option('-T', '--time', action='store', type='int', dest='sample_time', default=1, help='Time used to sample number of pages faults')
-    p.add_option('-M', '--mongoversion', action='store', type='choice', dest='mongo_version', default='2', help='The MongoDB version you are talking with, either 2 or 3',
-      choices=['2','3'])
 
     options, arguments = p.parse_args()
     host = options.host
@@ -166,7 +164,6 @@ def main(argv):
     action = options.action
     perf_data = options.perf_data
     max_lag = options.max_lag
-    mongo_version = options.mongo_version
     database = options.database
     ssl = options.ssl
     replicaset = options.replicaset
@@ -202,7 +199,7 @@ def main(argv):
     elif action == "queues":
         return check_queues(con, warning, critical, perf_data)
     elif action == "lock":
-        return check_lock(con, warning, critical, perf_data, mongo_version)
+        return check_lock(con, warning, critical, perf_data)
     elif action == "current_lock":
         return check_current_lock(con, host, warning, critical, perf_data)
     elif action == "flushing":
@@ -239,9 +236,9 @@ def main(argv):
     elif action == "asserts":
         return check_asserts(con, host, warning, critical, perf_data)
     elif action == "replica_primary":
-        return check_replica_primary(con, host, warning, critical, perf_data, replicaset, mongo_version)
+        return check_replica_primary(con, host, warning, critical, perf_data, replicaset)
     elif action == "queries_per_second":
-        return check_queries_per_second(con, query_type, warning, critical, perf_data, mongo_version)
+        return check_queries_per_second(con, query_type, warning, critical, perf_data)
     elif action == "page_faults":
         check_page_faults(con, sample_time, warning, critical, perf_data)
     elif action == "chunks_balance":
@@ -619,30 +616,34 @@ def check_memory_mapped(con, warning, critical, perf_data):
 #
 # Return the percentage of the time there was a global Lock
 #
-def check_lock(con, warning, critical, perf_data, mongo_version):
+def check_lock(con, warning, critical, perf_data):
     warning = warning or 10
     critical = critical or 30
-    if mongo_version == "2":
-        try:
-            data = get_server_status(con)
-            lockTime = data['globalLock']['lockTime']
-            totalTime = data['globalLock']['totalTime']
-            #
-            # calculate percentage
-            #
-            if lockTime > totalTime:
-                lock_percentage = 0.00
-            else:
-                lock_percentage = float(lockTime) / float(totalTime) * 100
-            message = "Lock Percentage: %.2f%%" % lock_percentage
-            message += performance_data(perf_data, [("%.2f" % lock_percentage, "lock_percentage", warning, critical)])
-            return check_levels(lock_percentage, warning, critical, message)
-        except Exception, e:
-            print "Couldn't get globalLock lockTime info from mongo, are you sure you're not using version 3? See the -M option."
-            return exit_with_general_critical(e)
-    else:
-        print "FAIL - Mongo3 doesn't report on global locks"
-        return 1
+    try:
+        serverVersion = tuple(con.server_info()['version'].split('.'))
+        if serverVersion < tuple("3.0.0".split(".")):
+            try:
+                data = get_server_status(con)
+                lockTime = data['globalLock']['lockTime']
+                totalTime = data['globalLock']['totalTime']
+                #
+                # calculate percentage
+                #
+                if lockTime > totalTime:
+                    lock_percentage = 0.00
+                else:
+                    lock_percentage = float(lockTime) / float(totalTime) * 100
+                message = "Lock Percentage: %.2f%%" % lock_percentage
+                message += performance_data(perf_data, [("%.2f" % lock_percentage, "lock_percentage", warning, critical)])
+                return check_levels(lock_percentage, warning, critical, message)
+            except Exception, e:
+                return exit_with_general_critical(e)
+        else:
+            print "FAIL - MongoDB > 3.x doesn't report on global locks"
+            return 1
+
+    except Exception, e:
+        return exit_with_general_critical(e)
 
 
 def check_flushing(con, warning, critical, avg, perf_data):
@@ -654,17 +655,22 @@ def check_flushing(con, warning, critical, avg, perf_data):
     critical = critical or 15000
     try:
         data = get_server_status(con)
-        if avg:
-            flush_time = float(data['backgroundFlushing']['average_ms'])
-            stat_type = "Average"
+        if not data['storageEngine']['name'] == 'wiredTiger':
+            if avg:
+                flush_time = float(data['backgroundFlushing']['average_ms'])
+                stat_type = "Average"
+            else:
+                flush_time = float(data['backgroundFlushing']['last_ms'])
+                stat_type = "Last"
+
+            message = "%s Flush Time: %.2fms" % (stat_type, flush_time)
+            message += performance_data(perf_data, [("%.2fms" % flush_time, "%s_flush_time" % stat_type.lower(), warning, critical)])
+
+            return check_levels(flush_time, warning, critical, message)
+
         else:
-            flush_time = float(data['backgroundFlushing']['last_ms'])
-            stat_type = "Last"
-
-        message = "%s Flush Time: %.2fms" % (stat_type, flush_time)
-        message += performance_data(perf_data, [("%.2fms" % flush_time, "%s_flush_time" % stat_type.lower(), warning, critical)])
-
-        return check_levels(flush_time, warning, critical, message)
+            print "FAIL - StorageEngine WiredTiger doesn't have backgroundFlushing"
+            return 1
 
     except Exception, e:
         return exit_with_general_critical(e)
@@ -678,7 +684,10 @@ def index_miss_ratio(con, warning, critical, perf_data):
 
         try:
             serverVersion = tuple(con.server_info()['version'].split('.'))
-            if serverVersion >= tuple("2.4.0".split(".")):
+            if serverVersion >= tuple("3.0.0".split(".")):
+                print "FAIL - MongoDB > 3.x doesn't report on indexCounters"
+                return 1
+            elif serverVersion >= tuple("2.4.0".split(".")):
                 miss_ratio = float(data['indexCounters']['missRatio'])
             else:
                 miss_ratio = float(data['indexCounters']['btree']['missRatio'])
@@ -956,7 +965,7 @@ def check_collection_size(con, database, collection, warning, critical, perf_dat
     except Exception, e:
         return exit_with_general_critical(e)
 
-def check_queries_per_second(con, query_type, warning, critical, perf_data, mongo_version):
+def check_queries_per_second(con, query_type, warning, critical, perf_data):
     warning = warning or 250
     critical = critical or 500
 
@@ -980,10 +989,10 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
             query_per_sec = float(diff_query) / float(diff_ts)
 
             # update the count now
-            if mongo_version == "2":
-                db.nagios_check.update({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
-            else:
+            if pymongo.version >= "3.0":
                 db.nagios_check.update_one({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
+            else:
+                db.nagios_check.update({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
 
             message = "Queries / Sec: %f" % query_per_sec
             message += performance_data(perf_data, [(query_per_sec, "%s_per_sec" % query_type, warning, critical, message)])
@@ -992,20 +1001,20 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
             # since it is the first run insert it
             query_per_sec = 0
             message = "First run of check.. no data"
-            if mongo_version == "2":
-                db.nagios_check.update({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
-            else:
+            if pymongo.version >= "3.0":
                 db.nagios_check.update_one({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
+            else:
+                db.nagios_check.update({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
 
         except TypeError:
             #
             # since it is the first run insert it
             query_per_sec = 0
             message = "First run of check.. no data"
-            if mongo_version == "2":
-                db.nagios_check.insert({'check': 'query_counts', 'data': {query_type: {'count': num, 'ts': int(time.time())}}})
-            else:            
+            if pymongo.version >= "3.0":
                 db.nagios_check.insert_one({'check': 'query_counts', 'data': {query_type: {'count': num, 'ts': int(time.time())}}})
+            else:
+                db.nagios_check.insert({'check': 'query_counts', 'data': {query_type: {'count': num, 'ts': int(time.time())}}})
 
         return check_levels(query_per_sec, warning, critical, message)
 
@@ -1238,7 +1247,7 @@ def get_stored_primary_server_name(db):
     return stored_primary_server
 
 
-def check_replica_primary(con, host, warning, critical, perf_data, replicaset, mongo_version):
+def check_replica_primary(con, host, warning, critical, perf_data, replicaset):
     """ A function to check if the primary server of a replica set has changed """
     if warning is None and critical is None:
         warning = 1
@@ -1261,10 +1270,10 @@ def check_replica_primary(con, host, warning, critical, perf_data, replicaset, m
         saved_primary = "None"
     if current_primary != saved_primary:
         last_primary_server_record = {"server": current_primary}
-        if mongo_version == "2":
-            db.last_primary_server.update({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True, safe=True)
-        else:        
+        if pymongo.version >= "3.0":
             db.last_primary_server.update_one({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True, safe=True)
+        else:
+            db.last_primary_server.update({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True, safe=True)
         message = "Primary server has changed from %s to %s" % (saved_primary, current_primary)
         primary_status = 1
     return check_levels(primary_status, warning, critical, message)
