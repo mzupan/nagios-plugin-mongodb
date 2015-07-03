@@ -210,7 +210,7 @@ def main(argv):
     elif action == "last_flush_time":
         return check_flushing(con, warning, critical, False, perf_data)
     elif action == "index_miss_ratio":
-        index_miss_ratio(con, warning, critical, perf_data)
+        return index_miss_ratio(con, warning, critical, perf_data, mongo_version)
     elif action == "databases":
         return check_databases(con, warning, critical, perf_data)
     elif action == "collections":
@@ -670,34 +670,39 @@ def check_flushing(con, warning, critical, avg, perf_data):
         return exit_with_general_critical(e)
 
 
-def index_miss_ratio(con, warning, critical, perf_data):
+def index_miss_ratio(con, warning, critical, perf_data, mongo_version):
     warning = warning or 10
     critical = critical or 30
-    try:
-        data = get_server_status(con)
+    if mongo_version == "2":
+      try:
+          data = get_server_status(con)
 
-        try:
-            serverVersion = tuple(con.server_info()['version'].split('.'))
-            if serverVersion >= tuple("2.4.0".split(".")):
-                miss_ratio = float(data['indexCounters']['missRatio'])
-            else:
-                miss_ratio = float(data['indexCounters']['btree']['missRatio'])
-        except KeyError:
-            not_supported_msg = "not supported on this platform"
-            if data['indexCounters'].has_key('note'):
-                print "OK - MongoDB says: " + not_supported_msg
-                return 0
-            else:
-                print "WARNING - Can't get counter from MongoDB"
-                return 1
+          try:
+              serverVersion = tuple(con.server_info()['version'].split('.'))
+              if serverVersion >= tuple("2.4.0".split(".")):
+                  miss_ratio = float(data['indexCounters']['missRatio'])
+              else:
+                  miss_ratio = float(data['indexCounters']['btree']['missRatio'])
+          except KeyError:
+              not_supported_msg = "not supported on this platform"
+              if data['indexCounters'].has_key('note'):
+                  print "OK - MongoDB says: " + not_supported_msg
+                  return 0
+              else:
+                  print "WARNING - Can't get counter from MongoDB"
+                  return 1
 
-        message = "Miss Ratio: %.2f" % miss_ratio
-        message += performance_data(perf_data, [("%.2f" % miss_ratio, "index_miss_ratio", warning, critical)])
+          message = "Miss Ratio: %.2f" % miss_ratio
+          message += performance_data(perf_data, [("%.2f" % miss_ratio, "index_miss_ratio", warning, critical)])
 
-        return check_levels(miss_ratio, warning, critical, message)
+          return check_levels(miss_ratio, warning, critical, message)
 
-    except Exception, e:
-        return exit_with_general_critical(e)
+      except Exception, e:
+          return exit_with_general_critical(e)
+
+    else:
+        print "FAIL - Mongo version 3.x doesn't report on index miss ratio"
+        return 1
 
 def check_replset_quorum(con, perf_data):
     db = con['admin']
