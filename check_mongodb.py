@@ -132,7 +132,7 @@ def main(argv):
     p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold we want to set')
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'memory_mapped', 'lock',
-                          'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_indexes', 'collection_indexes', 'collection_size',
+                          'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_utilization', 'database_indexes', 'collection_indexes', 'collection_size',
                           'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary', 'page_faults',
                           'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count', 'replset_quorum'])
     p.add_option('--max-lag', action='store_true', dest='max_lag', default=False, help='Get max replication lag (for replication_lag action only)')
@@ -224,6 +224,8 @@ def main(argv):
             return check_all_databases_size(con, warning, critical, perf_data)
         else:
             return check_database_size(con, database, warning, critical, perf_data)
+    elif action == "database_utilization":
+        return check_database_utilization(con, database, warning, critical, perf_data)
     elif action == "database_indexes":
         return check_database_indexes(con, database, warning, critical, perf_data)
     elif action == "collection_indexes":
@@ -858,6 +860,36 @@ def check_database_size(con, database, warning, critical, perf_data):
             return 1
         else:
             print "OK - Database size: %.0f MB, Database: %s%s" % (storage_size, database, perfdata)
+            return 0
+    except Exception, e:
+        return exit_with_general_critical(e)
+
+
+def check_database_utilization(con, database, warning, critical, perf_data):
+    #
+    # These thresholds are what normally would be considered to indicate that a compress is required
+    # and should be customized to your application
+    #
+    warning = warning or 20
+    critical = critical or 10
+    perfdata = ""
+    try:
+        set_read_preference(con.admin)
+        data = con[database].command('dbstats')
+        storage_size = data['storageSize'] / 1024 / 1024
+        data_size = data['dataSize'] / 1024 / 1024
+        database_utilization = (data_size / storage_size) * 100
+        if perf_data:
+            perfdata += " | database_utilization=%.0f%%;%i;%i database_storage_size=%iMB database_data_size=%iMB" % (database_utilization, warning, critical, storage_size, data_size)
+
+        if database_utilization <= critical:
+            print "CRITICAL - Database utilization: %.0f%% (%iMB used of %iMB on disk), Database: %s%s" % (database_utilization, data_size, storage_size, database, perfdata)
+            return 2
+        elif database_utilization <= warning:
+            print "WARNING - Database utilization: %.0f%% (%iMB used of %iMB on disk), Database: %s%s" % (database_utilization, data_size, storage_size, database, perfdata)
+            return 1
+        else:
+            print "OK - Database utilization: %.0f%% (%iMB used of %iMB on disk), Database: %s%s" % (database_utilization, data_size, storage_size, database, perfdata)
             return 0
     except Exception, e:
         return exit_with_general_critical(e)
