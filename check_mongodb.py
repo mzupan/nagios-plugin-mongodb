@@ -1381,6 +1381,8 @@ def check_connect_primary(con, warning, critical, perf_data):
 def check_collection_state(con, database, collection):
     try:
         con[database][collection].find_one()
+        if (id==None):
+            return exit_with_general_critical('No result for findOne')
         print "OK - Collection %s.%s is reachable " % (database, collection)
         return 0
 
