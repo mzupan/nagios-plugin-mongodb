@@ -257,18 +257,16 @@ def main(argv):
 
 def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, replica=None):
     try:
-        # ssl connection for pymongo > 2.3
-        if pymongo.version >= "2.3":
+        if pymongo.version >= "2.4":
             if replica is None:
-                con = pymongo.MongoClient(host, port)
+                con = pymongo.MongoClient(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl, socketTimeoutMS=10000)
             else:
-                con = pymongo.Connection(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl, replicaSet=replica, network_timeout=10)
+                con = pymongo.MongoClient(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl, replicaSet=replica, socketTimeoutMS=10000)
         else:
             if replica is None:
                 con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
             else:
-                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
-                #con = pymongo.Connection(host, port, slave_okay=True, replicaSet=replica, network_timeout=10)
+                con = pymongo.Connection(host, port, slave_okay=True, replicaSet=replica, network_timeout=10)
 
         if user and passwd:
             db = con["admin"]
