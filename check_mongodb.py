@@ -133,8 +133,8 @@ def main(argv):
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'memory_mapped', 'lock',
                           'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_indexes', 'collection_indexes', 'collection_size',
-                          'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary', 'page_faults',
-                          'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count', 'replset_quorum'])
+                          'collection_storageSize', 'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary', 
+                          'page_faults', 'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count', 'replset_quorum'])
     p.add_option('--max-lag', action='store_true', dest='max_lag', default=False, help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory', action='store_true', dest='mapped_memory', default=False, help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -230,6 +230,8 @@ def main(argv):
         return check_collection_indexes(con, database, collection, warning, critical, perf_data)
     elif action == "collection_size":
         return check_collection_size(con, database, collection, warning, critical, perf_data)
+    elif action == "collection_storageSize":
+        return check_collection_storageSize(con, database, collection, warning, critical, perf_data)
     elif action == "journaled":
         return check_journaled(con, warning, critical, perf_data)
     elif action == "write_data_files":
@@ -955,6 +957,31 @@ def check_collection_size(con, database, collection, warning, critical, perf_dat
             return 0
     except Exception, e:
         return exit_with_general_critical(e)
+
+
+def check_collection_storageSize(con, database, collection, warning, critical, perf_data):
+    warning = warning or 100
+    critical = critical or 1000
+    perfdata = ""
+    try:
+        set_read_preference(con.admin)
+        data = con[database].command('collstats', collection)
+        storageSize = data['storageSize'] / 1024 / 1024
+        if perf_data:
+            perfdata += " | collection_storageSize=%i;%i;%i" % (storageSize, warning, critical)
+
+        if storageSize >= critical:
+            print "CRITICAL - %s.%s storageSize: %.0f MB %s" % (database, collection, storageSize, perfdata)
+            return 2
+        elif storageSize >= warning:
+            print "WARNING - %s.%s storageSize: %.0f MB %s" % (database, collection, storageSize, perfdata)
+            return 1
+        else:
+            print "OK - %s.%s storageSize: %.0f MB %s" % (database, collection, storageSize, perfdata)
+            return 0
+    except Exception, e:
+        return exit_with_general_critical(e)
+
 
 def check_queries_per_second(con, query_type, warning, critical, perf_data, mongo_version):
     warning = warning or 250
