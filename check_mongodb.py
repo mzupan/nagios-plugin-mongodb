@@ -125,11 +125,11 @@ def main(argv):
     p = optparse.OptionParser(conflict_handler="resolve", description="This Nagios plugin checks the health of mongodb.")
 
     p.add_option('-H', '--host', action='store', type='string', dest='host', default='127.0.0.1', help='The hostname you want to connect to')
-    p.add_option('-P', '--port', action='store', type='int', dest='port', default=27017, help='The port mongodb is runnung on')
+    p.add_option('-P', '--port', action='store', type='int', dest='port', default=27017, help='The port mongodb is running on')
     p.add_option('-u', '--user', action='store', type='string', dest='user', default=None, help='The username you want to login as')
     p.add_option('-p', '--pass', action='store', type='string', dest='passwd', default=None, help='The password you want to use for that user')
-    p.add_option('-W', '--warning', action='store', dest='warning', default=None, help='The warning threshold we want to set')
-    p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold we want to set')
+    p.add_option('-W', '--warning', action='store', dest='warning', default=None, help='The warning threshold you want to set')
+    p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold you want to set')
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'memory_mapped', 'lock',
                           'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_indexes', 'collection_indexes', 'collection_size',
