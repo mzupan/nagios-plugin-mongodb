@@ -992,13 +992,14 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
 
     try:
         db = con.local
+        nagdb = con["nagios"]
         data = get_server_status(con)
 
         # grab the count
         num = int(data['opcounters'][query_type])
 
         # do the math
-        last_count = db.nagios_check.find_one({'check': 'query_counts'})
+        last_count = nagdb.nagios_check.find_one({'check': 'query_counts'})
         try:
             ts = int(time.time())
             diff_query = num - last_count['data'][query_type]['count']
@@ -1008,9 +1009,9 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
 
             # update the count now
             if mongo_version == "2":
-                db.nagios_check.update({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
+                nagdb.nagios_check.update({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
             else:
-                db.nagios_check.update_one({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
+                nagdb.nagios_check.update_one({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
 
             message = "Queries / Sec: %f" % query_per_sec
             message += performance_data(perf_data, [(query_per_sec, "%s_per_sec" % query_type, warning, critical, message)])
@@ -1020,9 +1021,9 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
             query_per_sec = 0
             message = "First run of check.. no data"
             if mongo_version == "2":
-                db.nagios_check.update({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
+                nagdb.nagios_check.update({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
             else:
-                db.nagios_check.update_one({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
+                nagdb.nagios_check.update_one({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
 
         except TypeError:
             #
@@ -1030,9 +1031,9 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
             query_per_sec = 0
             message = "First run of check.. no data"
             if mongo_version == "2":
-                db.nagios_check.insert({'check': 'query_counts', 'data': {query_type: {'count': num, 'ts': int(time.time())}}})
+                nagdb.nagios_check.insert({'check': 'query_counts', 'data': {query_type: {'count': num, 'ts': int(time.time())}}})
             else:            
-                db.nagios_check.insert_one({'check': 'query_counts', 'data': {query_type: {'count': num, 'ts': int(time.time())}}})
+                nagdb.nagios_check.insert_one({'check': 'query_counts', 'data': {query_type: {'count': num, 'ts': int(time.time())}}})
 
         return check_levels(query_per_sec, warning, critical, message)
 
