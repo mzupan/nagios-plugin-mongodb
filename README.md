@@ -235,20 +235,6 @@ define service {
 </code></pre>
 
 
-#### Check utilization of a database
-This will check the utilization of a database as the percentage of data size vs the size of the database on disk.
-This is useful for keeping track of growth of a particular database and determining when a data compress or repair
-should be considered.
-Replace your-database with the name of your database
-<pre><code>
-define service {
-      use                     generic-service
-      hostgroup_name          Mongo Servers
-      service_description     MongoDB Database utilization your-database
-      check_command           check_mongodb_database!database_utilization!27017!25!10!your-database
-}
-</code></pre>
-
 
 #### Check index size of a database
 This will check the index size of a database. Overlarge indexes eat up memory and indicate a need for compaction.
