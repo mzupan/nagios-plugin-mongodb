@@ -125,16 +125,16 @@ def main(argv):
     p = optparse.OptionParser(conflict_handler="resolve", description="This Nagios plugin checks the health of mongodb.")
 
     p.add_option('-H', '--host', action='store', type='string', dest='host', default='127.0.0.1', help='The hostname you want to connect to')
-    p.add_option('-P', '--port', action='store', type='int', dest='port', default=27017, help='The port mongodb is runnung on')
+    p.add_option('-P', '--port', action='store', type='int', dest='port', default=27017, help='The port mongodb is running on')
     p.add_option('-u', '--user', action='store', type='string', dest='user', default=None, help='The username you want to login as')
     p.add_option('-p', '--pass', action='store', type='string', dest='passwd', default=None, help='The password you want to use for that user')
-    p.add_option('-W', '--warning', action='store', dest='warning', default=None, help='The warning threshold we want to set')
-    p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold we want to set')
+    p.add_option('-W', '--warning', action='store', dest='warning', default=None, help='The warning threshold you want to set')
+    p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold you want to set')
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'memory_mapped', 'lock',
-                          'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_utilization', 'database_indexes', 'collection_indexes', 'collection_size',
-                          'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary', 'page_faults',
-                          'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count', 'replset_quorum'])
+                          'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_indexes', 'collection_indexes', 'collection_size',
+                          'collection_storageSize', 'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary', 
+                          'page_faults', 'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count', 'replset_quorum'])
     p.add_option('--max-lag', action='store_true', dest='max_lag', default=False, help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory', action='store_true', dest='mapped_memory', default=False, help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -224,14 +224,14 @@ def main(argv):
             return check_all_databases_size(con, warning, critical, perf_data)
         else:
             return check_database_size(con, database, warning, critical, perf_data)
-    elif action == "database_utilization":
-        return check_database_utilization(con, database, warning, critical, perf_data)
     elif action == "database_indexes":
         return check_database_indexes(con, database, warning, critical, perf_data)
     elif action == "collection_indexes":
         return check_collection_indexes(con, database, collection, warning, critical, perf_data)
     elif action == "collection_size":
         return check_collection_size(con, database, collection, warning, critical, perf_data)
+    elif action == "collection_storageSize":
+        return check_collection_storageSize(con, database, collection, warning, critical, perf_data)
     elif action == "journaled":
         return check_journaled(con, warning, critical, perf_data)
     elif action == "write_data_files":
@@ -865,36 +865,6 @@ def check_database_size(con, database, warning, critical, perf_data):
         return exit_with_general_critical(e)
 
 
-def check_database_utilization(con, database, warning, critical, perf_data):
-    #
-    # These thresholds are what normally would be considered to indicate that a compress is required
-    # and should be customized to your application
-    #
-    warning = warning or 20
-    critical = critical or 10
-    perfdata = ""
-    try:
-        set_read_preference(con.admin)
-        data = con[database].command('dbstats')
-        storage_size = data['storageSize'] / 1024 / 1024
-        data_size = data['dataSize'] / 1024 / 1024
-        database_utilization = (data_size / storage_size) * 100
-        if perf_data:
-            perfdata += " | database_utilization=%.0f%%;%i;%i database_storage_size=%iMB database_data_size=%iMB" % (database_utilization, warning, critical, storage_size, data_size)
-
-        if database_utilization <= critical:
-            print "CRITICAL - Database utilization: %.0f%% (%iMB used of %iMB on disk), Database: %s%s" % (database_utilization, data_size, storage_size, database, perfdata)
-            return 2
-        elif database_utilization <= warning:
-            print "WARNING - Database utilization: %.0f%% (%iMB used of %iMB on disk), Database: %s%s" % (database_utilization, data_size, storage_size, database, perfdata)
-            return 1
-        else:
-            print "OK - Database utilization: %.0f%% (%iMB used of %iMB on disk), Database: %s%s" % (database_utilization, data_size, storage_size, database, perfdata)
-            return 0
-    except Exception, e:
-        return exit_with_general_critical(e)
-
-
 def check_database_indexes(con, database, warning, critical, perf_data):
     #
     # These thresholds are basically meaningless, and must be customized to your application
@@ -987,6 +957,31 @@ def check_collection_size(con, database, collection, warning, critical, perf_dat
             return 0
     except Exception, e:
         return exit_with_general_critical(e)
+
+
+def check_collection_storageSize(con, database, collection, warning, critical, perf_data):
+    warning = warning or 100
+    critical = critical or 1000
+    perfdata = ""
+    try:
+        set_read_preference(con.admin)
+        data = con[database].command('collstats', collection)
+        storageSize = data['storageSize'] / 1024 / 1024
+        if perf_data:
+            perfdata += " | collection_storageSize=%i;%i;%i" % (storageSize, warning, critical)
+
+        if storageSize >= critical:
+            print "CRITICAL - %s.%s storageSize: %.0f MB %s" % (database, collection, storageSize, perfdata)
+            return 2
+        elif storageSize >= warning:
+            print "WARNING - %s.%s storageSize: %.0f MB %s" % (database, collection, storageSize, perfdata)
+            return 1
+        else:
+            print "OK - %s.%s storageSize: %.0f MB %s" % (database, collection, storageSize, perfdata)
+            return 0
+    except Exception, e:
+        return exit_with_general_critical(e)
+
 
 def check_queries_per_second(con, query_type, warning, critical, perf_data, mongo_version):
     warning = warning or 250
