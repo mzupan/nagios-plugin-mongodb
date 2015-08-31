@@ -204,7 +204,7 @@ def main(argv):
     elif action == "lock":
         return check_lock(con, warning, critical, perf_data, mongo_version)
     elif action == "current_lock":
-        return check_current_lock(con, host, warning, critical, perf_data)
+        return check_current_lock(con, host, port, warning, critical, perf_data)
     elif action == "flushing":
         return check_flushing(con, warning, critical, True, perf_data)
     elif action == "last_flush_time":
@@ -237,11 +237,11 @@ def main(argv):
     elif action == "write_data_files":
         return check_write_to_datafiles(con, warning, critical, perf_data)
     elif action == "opcounters":
-        return check_opcounters(con, host, warning, critical, perf_data)
+        return check_opcounters(con, host, port, warning, critical, perf_data)
     elif action == "asserts":
-        return check_asserts(con, host, warning, critical, perf_data)
+        return check_asserts(con, host, port, warning, critical, perf_data)
     elif action == "replica_primary":
-        return check_replica_primary(con, host, warning, critical, perf_data, replicaset, mongo_version)
+        return check_replica_primary(con, host, port, warning, critical, perf_data, replicaset, mongo_version)
     elif action == "queries_per_second":
         return check_queries_per_second(con, query_type, warning, critical, perf_data, mongo_version)
     elif action == "page_faults":
@@ -1138,7 +1138,7 @@ than the amount physically written to disk."""
         return exit_with_general_critical(e)
 
 
-def get_opcounters(data, opcounters_name, host):
+def get_opcounters(data, opcounters_name, host, port):
     try:
         insert = data[opcounters_name]['insert']
         query = data[opcounters_name]['query']
@@ -1150,17 +1150,17 @@ def get_opcounters(data, opcounters_name, host):
         return 0, [0] * 100
     total_commands = insert + query + update + delete + getmore + command
     new_vals = [total_commands, insert, query, update, delete, getmore, command]
-    return  maintain_delta(new_vals, host, opcounters_name)
+    return  maintain_delta(new_vals, host, port, opcounters_name)
 
 
-def check_opcounters(con, host, warning, critical, perf_data):
+def check_opcounters(con, host, port, warning, critical, perf_data):
     """ A function to get all opcounters delta per minute. In case of a replication - gets the opcounters+opcountersRepl"""
     warning = warning or 10000
     critical = critical or 15000
 
     data = get_server_status(con)
-    err1, delta_opcounters = get_opcounters(data, 'opcounters', host)
-    err2, delta_opcounters_repl = get_opcounters(data, 'opcountersRepl', host)
+    err1, delta_opcounters = get_opcounters(data, 'opcounters', host, port)
+    err2, delta_opcounters_repl = get_opcounters(data, 'opcountersRepl', host, port)
     if err1 == 0 and err2 == 0:
         delta = [(x + y) for x, y in zip(delta_opcounters, delta_opcounters_repl)]
         delta[0] = delta_opcounters[0]  # only the time delta shouldn't be summarized
@@ -1175,7 +1175,7 @@ def check_opcounters(con, host, warning, critical, perf_data):
         return exit_with_general_critical("problem reading data from temp file")
 
 
-def check_current_lock(con, host, warning, critical, perf_data):
+def check_current_lock(con, host, port, warning, critical, perf_data):
     """ A function to get current lock percentage and not a global one, as check_lock function does"""
     warning = warning or 10
     critical = critical or 30
@@ -1184,7 +1184,7 @@ def check_current_lock(con, host, warning, critical, perf_data):
     lockTime = float(data['globalLock']['lockTime'])
     totalTime = float(data['globalLock']['totalTime'])
 
-    err, delta = maintain_delta([totalTime, lockTime], host, "locktime")
+    err, delta = maintain_delta([totalTime, lockTime], host, port, "locktime")
     if err == 0:
         lock_percentage = delta[2] / delta[1] * 100     # lockTime/totalTime*100
         message = "Current Lock Percentage: %.2f%%" % lock_percentage
@@ -1194,7 +1194,7 @@ def check_current_lock(con, host, warning, critical, perf_data):
         return exit_with_general_warning("problem reading data from temp file")
 
 
-def check_page_faults(con, host, warning, critical, perf_data):
+def check_page_faults(con, host, port, warning, critical, perf_data):
     """ A function to get page_faults per second from the system"""
     warning = warning or 10
     critical = critical or 30
@@ -1206,7 +1206,7 @@ def check_page_faults(con, host, warning, critical, perf_data):
         # page_faults unsupported on the underlaying system
         return exit_with_general_critical("page_faults unsupported on the underlaying system")
 
-    err, delta = maintain_delta([page_faults], host, "page_faults")
+    err, delta = maintain_delta([page_faults], host, port, "page_faults")
     if err == 0:
         page_faults_ps = delta[1] / delta[0]
         message = "Page faults : %.2f ps" % page_faults_ps
@@ -1216,7 +1216,7 @@ def check_page_faults(con, host, warning, critical, perf_data):
         return exit_with_general_warning("problem reading data from temp file")
 
 
-def check_asserts(con, host, warning, critical, perf_data):
+def check_asserts(con, host, port, warning, critical, perf_data):
     """ A function to get asserts from the system"""
     warning = warning or 1
     critical = critical or 10
@@ -1231,7 +1231,7 @@ def check_asserts(con, host, warning, critical, perf_data):
     user = asserts['user']
     rollovers = asserts['rollovers']
 
-    err, delta = maintain_delta([regular, warning_asserts, msg, user, rollovers], host, "asserts")
+    err, delta = maintain_delta([regular, warning_asserts, msg, user, rollovers], host, port, "asserts")
 
     if err == 0:
         if delta[5] != 0:
@@ -1427,10 +1427,14 @@ def check_row_count(con, database, collection, warning, critical, perf_data):
         return exit_with_general_critical(e)
 
 
-def build_file_name(host, action):
+def build_file_name(host, port, action):
     #done this way so it will work when run independently and from shell
     module_name = re.match('(.*//*)*(.*)\..*', __file__).group(2)
-    return "/tmp/" + module_name + "_data/" + host + "-" + action + ".data"
+
+    if (port == 27017):
+        return "/tmp/" + module_name + "_data/" + host + "-" + action + ".data"
+    else:
+        return "/tmp/" + module_name + "_data/" + host + "-" + str(port) + "-" + action + ".data"
 
 
 def ensure_dir(f):
@@ -1482,8 +1486,8 @@ def calc_delta(old, new):
     return 0, delta
 
 
-def maintain_delta(new_vals, host, action):
-    file_name = build_file_name(host, action)
+def maintain_delta(new_vals, host, port, action):
+    file_name = build_file_name(host, port, action)
     err, data = read_values(file_name)
     old_vals = data.split(';')
     new_vals = [str(int(time.time()))] + new_vals
