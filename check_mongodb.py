@@ -132,8 +132,9 @@ def main(argv):
     p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold you want to set')
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'memory_mapped', 'lock',
-                          'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_indexes', 'collection_indexes', 'collection_size',
-                          'collection_storageSize', 'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary', 
+                          'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_indexes',
+                          'collection_indexes', 'collection_count', 'collection_size',
+                          'collection_storageSize', 'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary',
                           'page_faults', 'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count', 'replset_quorum'])
     p.add_option('--max-lag', action='store_true', dest='max_lag', default=False, help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory', action='store_true', dest='mapped_memory', default=False, help='Get mapped memory instead of resident (if resident memory can not be read)')
@@ -228,6 +229,8 @@ def main(argv):
         return check_database_indexes(con, database, warning, critical, perf_data)
     elif action == "collection_indexes":
         return check_collection_indexes(con, database, collection, warning, critical, perf_data)
+    elif action == "collection_count":
+        return check_collection_count(con, database, collection, warning, critical, perf_data)
     elif action == "collection_size":
         return check_collection_size(con, database, collection, warning, critical, perf_data)
     elif action == "collection_storageSize":
@@ -914,6 +917,33 @@ def check_collection_indexes(con, database, collection, warning, critical, perf_
             return 1
         else:
             print "OK - %s.%s totalIndexSize: %.0f MB %s" % (database, collection, total_index_size, perfdata)
+            return 0
+    except Exception, e:
+        return exit_with_general_critical(e)
+
+
+def check_collection_count(con, database, collection, warning, critical, perf_data):
+    #
+    # These thresholds are basically meaningless, and must be customized to your application
+    #
+    warning = warning or 100
+    critical = critical or 1000
+    perfdata = ""
+    try:
+        set_read_preference(con.admin)
+        data = con[database].command('collstats', collection)
+        item_count = data['count'] / 1024
+        if perf_data:
+            perfdata += " | collection_count=%i;%i;%i" % (item_count, warning, critical)
+
+        if item_count >= critical:
+            print "CRITICAL - %s.%s item count: %.0f K %s" % (database, collection, item_count, perfdata)
+            return 2
+        elif item_count >= warning:
+            print "WARNING - %s.%s item count: %.0f K %s" % (database, collection, item_count, perfdata)
+            return 1
+        else:
+            print "OK - %s.%s item count: %.0f K %s" % (database, collection, item_count, perfdata)
             return 0
     except Exception, e:
         return exit_with_general_critical(e)
