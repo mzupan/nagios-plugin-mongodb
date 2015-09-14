@@ -1004,6 +1004,10 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
             diff_query = num - last_count['data'][query_type]['count']
             diff_ts = ts - last_count['data'][query_type]['ts']
 
+            if diff_ts == 0:
+                message = "diff_query = " + str(diff_query) + " diff_ts = " + str(diff_ts)
+                return check_levels(0, warning, critical, message)
+
             query_per_sec = float(diff_query) / float(diff_ts)
 
             # update the count now
