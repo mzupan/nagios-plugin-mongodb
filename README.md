@@ -21,6 +21,10 @@ In your Nagios plugins directory run
 
 <pre><code>git clone git://github.com/mzupan/nagios-plugin-mongodb.git</code></pre>
 
+Then use pip to ensure you have all pre-requisites.
+
+<pre><code>pip install requirements</code></pre>
+
 ## Usage
 
 ### Install in Nagios
