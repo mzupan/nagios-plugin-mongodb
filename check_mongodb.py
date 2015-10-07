@@ -133,7 +133,7 @@ def main(argv):
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'memory_mapped', 'lock',
                           'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_indexes', 'collection_indexes', 'collection_size',
-                          'collection_storageSize', 'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary', 
+                          'collection_storageSize', 'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary',
                           'page_faults', 'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count', 'replset_quorum'])
     p.add_option('--max-lag', action='store_true', dest='max_lag', default=False, help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory', action='store_true', dest='mapped_memory', default=False, help='Get mapped memory instead of resident (if resident memory can not be read)')
@@ -145,7 +145,7 @@ def main(argv):
     p.add_option('-q', '--querytype', action='store', dest='query_type', default='query', help='The query type to check [query|insert|update|delete|getmore|command] from queries_per_second')
     p.add_option('-c', '--collection', action='store', dest='collection', default='admin', help='Specify the collection to check')
     p.add_option('-T', '--time', action='store', type='int', dest='sample_time', default=1, help='Time used to sample number of pages faults')
-    p.add_option('-M', '--mongoversion', action='store', type='choice', dest='mongo_version', default='2', help='The MongoDB version you are talking with, either 2 or 3',
+    p.add_option('-M', '--mongoversion', action='store', type='choice', dest='mongo_version', default=0, help='The MongoDB version you are talking with, either 2 or 3',
       choices=['2','3'])
 
     options, arguments = p.parse_args()
@@ -166,7 +166,6 @@ def main(argv):
     action = options.action
     perf_data = options.perf_data
     max_lag = options.max_lag
-    mongo_version = options.mongo_version
     database = options.database
     ssl = options.ssl
     replicaset = options.replicaset
@@ -183,6 +182,15 @@ def main(argv):
     err, con = mongo_connect(host, port, ssl, user, passwd, replicaset)
     if err != 0:
         return err
+
+    # Autodetect mongo-version and force pymongo to let us know if it can connect or not.
+    err, mongo_version = check_version(con)
+    if err != 0:
+        return err
+
+    # Legacy support for -M. If -M is set force mongo_version to that.
+    if options.mongo_version != 0:
+        mongo_version = int(options.mongo_version)
 
     conn_time = time.time() - start
     conn_time = round(conn_time, 0)
@@ -310,6 +318,14 @@ def set_read_preference(db):
         db.read_preference = pymongo.ReadPreference.SECONDARY
 
 
+def check_version(con):
+    try:
+        server_info = con.server_info()
+    except Exception, e:
+        return exit_with_general_critical(e), None
+    return 0, int(server_info['version'].split('.')[0].strip())
+
+
 def check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time):
     warning = warning or 3
     critical = critical or 6
@@ -344,7 +360,7 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
     if "127.0.0.1" == host:
         if not "me" in con.admin.command("ismaster","1").keys():
             print "OK - This is not replicated MongoDB"
-            sys.exit(3)        
+            sys.exit(3)
 
         host = con.admin.command("ismaster","1")["me"].split(':')[0]
 
@@ -518,7 +534,7 @@ def check_memory(con, warning, critical, perf_data, mapped_memory, host):
     # memory used by Mongodb is ok or not.
     meminfo = open('/proc/meminfo').read()
     matched = re.search(r'^MemTotal:\s+(\d+)', meminfo)
-    if matched: 
+    if matched:
         mem_total_kB = int(matched.groups()[0])
 
     if host != "127.0.0.1" and not warning:
@@ -624,7 +640,7 @@ def check_memory_mapped(con, warning, critical, perf_data):
 def check_lock(con, warning, critical, perf_data, mongo_version):
     warning = warning or 10
     critical = critical or 30
-    if mongo_version == "2":
+    if mongo_version == 2:
         try:
             data = get_server_status(con)
             lockTime = data['globalLock']['lockTime']
@@ -1007,7 +1023,7 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
             query_per_sec = float(diff_query) / float(diff_ts)
 
             # update the count now
-            if mongo_version == "2":
+            if mongo_version == 2:
                 db.nagios_check.update({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
             else:
                 db.nagios_check.update_one({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
@@ -1019,7 +1035,7 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
             # since it is the first run insert it
             query_per_sec = 0
             message = "First run of check.. no data"
-            if mongo_version == "2":
+            if mongo_version == 2:
                 db.nagios_check.update({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
             else:
                 db.nagios_check.update_one({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
@@ -1029,9 +1045,9 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
             # since it is the first run insert it
             query_per_sec = 0
             message = "First run of check.. no data"
-            if mongo_version == "2":
+            if mongo_version == 2:
                 db.nagios_check.insert({'check': 'query_counts', 'data': {query_type: {'count': num, 'ts': int(time.time())}}})
-            else:            
+            else:
                 db.nagios_check.insert_one({'check': 'query_counts', 'data': {query_type: {'count': num, 'ts': int(time.time())}}})
 
         return check_levels(query_per_sec, warning, critical, message)
@@ -1288,9 +1304,9 @@ def check_replica_primary(con, host, warning, critical, perf_data, replicaset, m
         saved_primary = "None"
     if current_primary != saved_primary:
         last_primary_server_record = {"server": current_primary}
-        if mongo_version == "2":
+        if mongo_version == 2:
             db.last_primary_server.update({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True, safe=True)
-        else:        
+        else:
             db.last_primary_server.update_one({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True, safe=True)
         message = "Primary server has changed from %s to %s" % (saved_primary, current_primary)
         primary_status = 1
