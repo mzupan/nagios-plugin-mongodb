@@ -140,7 +140,7 @@ def main(argv):
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
     p.add_option('-d', '--database', action='store', dest='database', default='admin', help='Specify the database to check')
     p.add_option('--all-databases', action='store_true', dest='all_databases', default=False, help='Check all databases (action database_size)')
-    p.add_option('-s', '--ssl', dest='ssl', default=False, action='callback', callback=optional_arg(True), help='Connect using SSL')
+    p.add_option('-s', '--ssl', dest='ssl', default=True, action='callback', callback=optional_arg(True), help='Connect using SSL')
     p.add_option('-r', '--replicaset', dest='replicaset', default=None, action='callback', callback=optional_arg(True), help='Connect to replicaset')
     p.add_option('-q', '--querytype', action='store', dest='query_type', default='query', help='The query type to check [query|insert|update|delete|getmore|command] from queries_per_second')
     p.add_option('-c', '--collection', action='store', dest='collection', default='admin', help='Specify the collection to check')
@@ -260,19 +260,19 @@ def main(argv):
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
 
-def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, replica=None):
+def mongo_connect(host=None, port=None, ssl=True, user=None, passwd=None, replica=None):
     try:
         # ssl connection for pymongo > 2.3
         if pymongo.version >= "2.3":
             if replica is None:
-                con = pymongo.MongoClient(host, port)
+                con = pymongo.MongoClient(host, port, ssl=ssl)
             else:
                 con = pymongo.Connection(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl, replicaSet=replica, network_timeout=10)
         else:
             if replica is None:
-                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
+                con = pymongo.Connection(host, port, ssl=ssl, slave_okay=True, network_timeout=10)
             else:
-                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
+                con = pymongo.Connection(host, port, ssl=ssl, slave_okay=True, network_timeout=10)
                 #con = pymongo.Connection(host, port, slave_okay=True, replicaSet=replica, network_timeout=10)
 
         if user and passwd:
