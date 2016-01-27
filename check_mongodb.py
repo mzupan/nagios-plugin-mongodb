@@ -306,9 +306,10 @@ def exit_with_general_critical(e):
 
 
 def set_read_preference(db):
-    if pymongo.version >= "2.1":
+    if pymongo.version >= "2.2":
+        pymongo.read_preferences.Secondary
+    else:
         db.read_preference = pymongo.ReadPreference.SECONDARY
-
 
 def check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time):
     warning = warning or 3
