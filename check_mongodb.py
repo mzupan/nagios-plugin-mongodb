@@ -267,12 +267,12 @@ def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, repli
             if replica is None:
                 con = pymongo.MongoClient(host, port)
             else:
-                con = pymongo.Connection(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl, replicaSet=replica, network_timeout=10)
+                con = pymongo.MongoClient(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl, replicaSet=replica)
         else:
             if replica is None:
-                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
+                con = pymongo.MongoClient(host, port, slave_okay=True)
             else:
-                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
+                con = pymongo.MongoClient(host, port, slave_okay=True)
                 #con = pymongo.Connection(host, port, slave_okay=True, replicaSet=replica, network_timeout=10)
 
         if user and passwd:
@@ -1289,9 +1289,9 @@ def check_replica_primary(con, host, warning, critical, perf_data, replicaset, m
     if current_primary != saved_primary:
         last_primary_server_record = {"server": current_primary}
         if mongo_version == "2":
-            db.last_primary_server.update({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True, safe=True)
+            db.last_primary_server.update({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True)
         else:        
-            db.last_primary_server.update_one({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True, safe=True)
+            db.last_primary_server.update_one({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True)
         message = "Primary server has changed from %s to %s" % (saved_primary, current_primary)
         primary_status = 1
     return check_levels(primary_status, warning, critical, message)
