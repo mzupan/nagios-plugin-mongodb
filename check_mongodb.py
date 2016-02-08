@@ -307,7 +307,7 @@ def exit_with_general_critical(e):
 
 
 def set_read_preference(db):
-    if pymongo.version >= "2.1":
+    if pymongo.version < "2.9":
         db.read_preference = pymongo.ReadPreference.SECONDARY
 
 
