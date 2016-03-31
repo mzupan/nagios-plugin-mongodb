@@ -25,18 +25,18 @@
 # See the README.md
 #
 
-import sys
-import time
-import optparse
-import textwrap
-import re
-import os
+from sys import exit, argv
+from time import time
+from optparse import OptionParser
+# import textwrap
+from re import match, search
+from os import makedirs, path
 
 try:
     import pymongo
 except ImportError, e:
     print e
-    sys.exit(2)
+    exit(2)
 
 # As of pymongo v 1.9 the SON API is part of the BSON package, therefore attempt
 # to import from there and fall back to pymongo in cases of older pymongo
@@ -88,25 +88,25 @@ def check_levels(param, warning, critical, message, ok=[]):
     if (numeric_type(critical) and numeric_type(warning)):
         if param >= critical:
             print "CRITICAL - " + message
-            sys.exit(2)
+            exit(2)
         elif param >= warning:
             print "WARNING - " + message
-            sys.exit(1)
+            exit(1)
         else:
             print "OK - " + message
-            sys.exit(0)
+            exit(0)
     else:
         if param in critical:
             print "CRITICAL - " + message
-            sys.exit(2)
+            exit(2)
 
         if param in warning:
             print "WARNING - " + message
-            sys.exit(1)
+            exit(1)
 
         if param in ok:
             print "OK - " + message
-            sys.exit(0)
+            exit(0)
 
         # unexpected param value
         print "CRITICAL - Unexpected value : %d" % param + "; " + message
@@ -123,7 +123,7 @@ def get_server_status(con):
 
 
 def main(argv):
-    p = optparse.OptionParser(conflict_handler="resolve", description="This Nagios plugin checks the health of mongodb.")
+    p = OptionParser(conflict_handler="resolve", description="This Nagios plugin checks the health of mongodb.")
 
     p.add_option('-H', '--host', action='store', type='string', dest='host', default='127.0.0.1', help='The hostname you want to connect to')
     p.add_option('-P', '--port', action='store', type='int', dest='port', default=27017, help='The port mongodb is running on')
@@ -134,7 +134,7 @@ def main(argv):
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'memory_mapped', 'lock',
                           'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_indexes', 'collection_indexes', 'collection_size',
-                          'collection_storageSize', 'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary', 
+                          'collection_storageSize', 'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary',
                           'page_faults', 'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count', 'replset_quorum'])
     p.add_option('--max-lag', action='store_true', dest='max_lag', default=False, help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory', action='store_true', dest='mapped_memory', default=False, help='Get mapped memory instead of resident (if resident memory can not be read)')
@@ -146,6 +146,7 @@ def main(argv):
     p.add_option('-q', '--querytype', action='store', dest='query_type', default='query', help='The query type to check [query|insert|update|delete|getmore|command] from queries_per_second')
     p.add_option('-c', '--collection', action='store', dest='collection', default='admin', help='Specify the collection to check')
     p.add_option('-T', '--time', action='store', type='int', dest='sample_time', default=1, help='Time used to sample number of pages faults')
+    p.add_option('-t', '--timeout', action='store', type='int', dest='def_timeout', default=5000, help='Timeouts to use in Mongo Client connections')
     p.add_option('-M', '--mongoversion', action='store', type='choice', dest='mongo_version', default='2', help='The MongoDB version you are talking with, either 2 or 3',
       choices=['2','3'])
 
@@ -157,6 +158,7 @@ def main(argv):
     query_type = options.query_type
     collection = options.collection
     sample_time = options.sample_time
+    def_timeout = options.def_timeout
     if (options.action == 'replset_state'):
         warning = str(options.warning or "")
         critical = str(options.critical or "")
@@ -180,12 +182,12 @@ def main(argv):
     #
     # moving the login up here and passing in the connection
     #
-    start = time.time()
-    err, con = mongo_connect(host, port, ssl, user, passwd, replicaset)
+    start = time()
+    err, con = mongo_connect(host, port, ssl, user, passwd, replicaset, def_timeout)
     if err != 0:
         return err
 
-    conn_time = time.time() - start
+    conn_time = time() - start
     conn_time = round(conn_time, 0)
 
     if action == "connections":
@@ -261,14 +263,24 @@ def main(argv):
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
 
-def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, replica=None):
+def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, replica=None, timeouts=5000):
     try:
+        # ssl connection for pymongo > 2.3 + ensure a connection with pymongo > 3 (with timeouts)
+        if pymongo.version >= "3":
+            if replica is None:
+                con = pymongo.MongoClient(host, port, serverSelectionTimeoutMS=timeouts, connectTImeoutMS=timeouts, socketTimeoutMS=timeouts)
+                con.server_info()
+            else:
+                con = pymongo.MongoClient(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl, replicaSet=replica, serverSelectionTimeoutMS=timeouts, connectTImeoutMS=timeouts, socketTimeoutMS=timeouts)
+                con.server_info()
         # ssl connection for pymongo > 2.3
-        if pymongo.version >= "2.3":
+        elif pymongo.version >= "2.3":
             if replica is None:
                 con = pymongo.MongoClient(host, port)
+                con.server_info()
             else:
                 con = pymongo.MongoClient(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl, replicaSet=replica)
+                con.server_info()
         else:
             if replica is None:
                 con = pymongo.MongoClient(host, port, slave_okay=True)
@@ -279,13 +291,13 @@ def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, repli
         if user and passwd:
             db = con["admin"]
             if not db.authenticate(user, passwd):
-                sys.exit("Username/Password incorrect")
+                exit("Username/Password incorrect")
     except Exception, e:
         if isinstance(e, pymongo.errors.AutoReconnect) and str(e).find(" is an arbiter") != -1:
             # We got a pymongo AutoReconnect exception that tells us we connected to an Arbiter Server
             # This means: Arbiter is reachable and can answer requests/votes - this is all we need to know from an arbiter
             print "OK - State: 7 (Arbiter)"
-            sys.exit(0)
+            exit(0)
         return exit_with_general_critical(e), None
     return 0, con
 
@@ -346,7 +358,7 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
     if "127.0.0.1" == host:
         if not "me" in con.admin.command("ismaster","1").keys():
             print "OK - This is not replicated MongoDB"
-            sys.exit(3)        
+            exit(3)
 
         host = con.admin.command("ismaster","1")["me"].split(':')[0]
 
@@ -483,12 +495,12 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
             # Check if we're in the middle of an election and don't have a primary
             if primary_node is None:
                 print "WARNING - No primary defined. In an election?"
-                sys.exit(1)
+                exit(1)
 
             # Is the specified host the primary?
             if host_node["stateStr"] == "PRIMARY":
                 print "OK - This is the primary."
-                sys.exit(0)
+                exit(0)
 
             # Find the difference in optime between current node and PRIMARY
             optime_lag = abs(primary_node[1] - host_node["optimeDate"])
@@ -519,8 +531,8 @@ def check_memory(con, warning, critical, perf_data, mapped_memory, host):
     # are running this command remotely) and calculate based on that how much
     # memory used by Mongodb is ok or not.
     meminfo = open('/proc/meminfo').read()
-    matched = re.search(r'^MemTotal:\s+(\d+)', meminfo)
-    if matched: 
+    matched = search(r'^MemTotal:\s+(\d+)', meminfo)
+    if matched:
         mem_total_kB = int(matched.groups()[0])
 
     if host != "127.0.0.1" and not warning:
@@ -1002,7 +1014,7 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
         # do the math
         last_count = db.nagios_check.find_one({'check': 'query_counts'})
         try:
-            ts = int(time.time())
+            ts = int(time())
             diff_query = num - last_count['data'][query_type]['count']
             diff_ts = ts - last_count['data'][query_type]['ts']
 
@@ -1010,9 +1022,9 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
 
             # update the count now
             if mongo_version == "2":
-                db.nagios_check.update({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
+                db.nagios_check.update({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time())}}})
             else:
-                db.nagios_check.update_one({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
+                db.nagios_check.update_one({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time())}}})
 
             message = "Queries / Sec: %f" % query_per_sec
             message += performance_data(perf_data, [(query_per_sec, "%s_per_sec" % query_type, warning, critical, message)])
@@ -1022,9 +1034,9 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
             query_per_sec = 0
             message = "First run of check.. no data"
             if mongo_version == "2":
-                db.nagios_check.update({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
+                db.nagios_check.update({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time())}}})
             else:
-                db.nagios_check.update_one({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
+                db.nagios_check.update_one({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time())}}})
 
         except TypeError:
             #
@@ -1032,9 +1044,9 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
             query_per_sec = 0
             message = "First run of check.. no data"
             if mongo_version == "2":
-                db.nagios_check.insert({'check': 'query_counts', 'data': {query_type: {'count': num, 'ts': int(time.time())}}})
-            else:            
-                db.nagios_check.insert_one({'check': 'query_counts', 'data': {query_type: {'count': num, 'ts': int(time.time())}}})
+                db.nagios_check.insert({'check': 'query_counts', 'data': {query_type: {'count': num, 'ts': int(time())}}})
+            else:
+                db.nagios_check.insert_one({'check': 'query_counts', 'data': {query_type: {'count': num, 'ts': int(time())}}})
 
         return check_levels(query_per_sec, warning, critical, message)
 
@@ -1292,7 +1304,7 @@ def check_replica_primary(con, host, warning, critical, perf_data, replicaset, m
         last_primary_server_record = {"server": current_primary}
         if mongo_version == "2":
             db.last_primary_server.update({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True)
-        else:        
+        else:
             db.last_primary_server.update_one({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True)
         message = "Primary server has changed from %s to %s" % (saved_primary, current_primary)
         primary_status = 1
@@ -1318,7 +1330,7 @@ def check_page_faults(con, sample_time, warning, critical, perf_data):
             page_faults = (int(data2['extra_info']['page_faults']) - int(data1['extra_info']['page_faults'])) / sample_time
         except KeyError:
             print "WARNING - Can't get extra_info.page_faults counter from MongoDB"
-            sys.exit(1)
+            exit(1)
 
         message = "Page Faults: %i" % (page_faults)
 
@@ -1342,11 +1354,11 @@ def chunks_balance(con, database, collection, warning, critical):
 
         except:
             print "WARNING - Can't get chunks infos from MongoDB"
-            sys.exit(1)
+            exit(1)
 
         if nscount == 0:
             print "WARNING - Namespace %s is not sharded" % (nsfilter)
-            sys.exit(1)
+            exit(1)
 
         avgchunksnb = nscount / len(shards)
         warningnb = avgchunksnb * warning / 100
@@ -1358,19 +1370,19 @@ def chunks_balance(con, database, collection, warning, critical):
 
             if delta >= criticalnb and delta > 0:
                 print "CRITICAL - Chunks not well balanced " + message
-                sys.exit(2)
+                exit(2)
             elif delta >= warningnb  and delta > 0:
                 print "WARNING - Chunks not well balanced  " + message
-                sys.exit(1)
+                exit(1)
 
         print "OK - Chunks well balanced across shards"
-        sys.exit(0)
+        exit(0)
 
     except Exception, e:
         exit_with_general_critical(e)
 
     print "OK - Chunks well balanced across shards"
-    sys.exit(0)
+    exit(0)
 
 
 def check_connect_primary(con, warning, critical, perf_data):
@@ -1390,13 +1402,13 @@ def check_connect_primary(con, warning, critical, perf_data):
 
         phost = data['primary'].split(':')[0]
         pport = int(data['primary'].split(':')[1])
-        start = time.time()
+        start = time()
 
         err, con = mongo_connect(phost, pport)
         if err != 0:
             return err
 
-        pconn_time = time.time() - start
+        pconn_time = time() - start
         pconn_time = round(pconn_time, 0)
         message = "Connection to primary server " + data['primary'] + " took %i seconds" % pconn_time
         message += performance_data(perf_data, [(pconn_time, "connection_time", warning, critical)])
@@ -1431,14 +1443,14 @@ def check_row_count(con, database, collection, warning, critical, perf_data):
 
 def build_file_name(host, action):
     #done this way so it will work when run independently and from shell
-    module_name = re.match('(.*//*)*(.*)\..*', __file__).group(2)
+    module_name = match('(.*//*)*(.*)\..*', __file__).group(2)
     return "/tmp/" + module_name + "_data/" + host + "-" + action + ".data"
 
 
 def ensure_dir(f):
-    d = os.path.dirname(f)
-    if not os.path.exists(d):
-        os.makedirs(d)
+    d = path.dirname(f)
+    if not path.exists(d):
+        makedirs(d)
 
 
 def write_values(file_name, string):
@@ -1488,7 +1500,7 @@ def maintain_delta(new_vals, host, action):
     file_name = build_file_name(host, action)
     err, data = read_values(file_name)
     old_vals = data.split(';')
-    new_vals = [str(int(time.time()))] + new_vals
+    new_vals = [str(int(time()))] + new_vals
     delta = None
     try:
         err, delta = calc_delta(old_vals, new_vals)
@@ -1517,4 +1529,4 @@ def replication_get_time_diff(con):
 # main app
 #
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    exit(main(argv[1:]))
