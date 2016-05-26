@@ -1173,7 +1173,7 @@ def check_opcounters(con, host, warning, critical, perf_data):
         message = "Test succeeded , old values missing"
         message = "Opcounters: total=%d,insert=%d,query=%d,update=%d,delete=%d,getmore=%d,command=%d" % tuple(per_minute_delta)
         message += performance_data(perf_data, ([(per_minute_delta[0], "total", warning, critical), (per_minute_delta[1], "insert"),
-                    (per_minute_delta[2], "query"), (per_minute_delta[3], "update"), (per_minute_delta[5], "delete"),
+                    (per_minute_delta[2], "query"), (per_minute_delta[3], "update"), (per_minute_delta[4], "delete"),
                     (per_minute_delta[5], "getmore"), (per_minute_delta[6], "command")]))
         return check_levels(per_minute_delta[0], warning, critical, message)
     else:
