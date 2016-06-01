@@ -684,11 +684,14 @@ def index_miss_ratio(con, warning, critical, perf_data):
         data = get_server_status(con)
 
         try:
-            serverVersion = tuple(con.server_info()['version'].split('.'))
-            if serverVersion >= tuple("2.4.0".split(".")):
-                miss_ratio = float(data['indexCounters']['missRatio'])
-            else:
+            serverVersion = tuple(data['version'].split('.'))
+            if serverVersion >= tuple("3.0.0".split(".")):
+                print "FAIL - Mongo3 doesn't report on Index Miss Ratio"
+                return 1
+            elif serverVersion >= tuple("2.4.0".split(".")):
                 miss_ratio = float(data['indexCounters']['btree']['missRatio'])
+            else:
+                miss_ratio = float(data['indexCounters']['missRatio'])
         except KeyError:
             not_supported_msg = "not supported on this platform"
             if data['indexCounters'].has_key('note'):
