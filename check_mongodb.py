@@ -18,6 +18,7 @@
 #   - @Andor on github
 #   - Steven Richards - Captainkrtek on github
 #   - Max Vernimmen - @mvernimmen-CG / @mvernimmen on github
+#   - Kris Childress - @kris@nivenly.com github.com/kris-nova
 #
 # USAGE
 #
@@ -128,7 +129,6 @@ def main(argv):
     p.add_option('-P', '--port', action='store', type='int', dest='port', default=27017, help='The port mongodb is running on')
     p.add_option('-u', '--user', action='store', type='string', dest='user', default=None, help='The username you want to login as')
     p.add_option('-p', '--pass', action='store', type='string', dest='passwd', default=None, help='The password you want to use for that user')
-    p.add_option('-a', '--authdb', action='store', type='string', dest='authdb', default='admin', help='The database you want to authenticate against')
     p.add_option('-W', '--warning', action='store', dest='warning', default=None, help='The warning threshold you want to set')
     p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold you want to set')
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
@@ -146,8 +146,7 @@ def main(argv):
     p.add_option('-q', '--querytype', action='store', dest='query_type', default='query', help='The query type to check [query|insert|update|delete|getmore|command] from queries_per_second')
     p.add_option('-c', '--collection', action='store', dest='collection', default='admin', help='Specify the collection to check')
     p.add_option('-T', '--time', action='store', type='int', dest='sample_time', default=1, help='Time used to sample number of pages faults')
-    p.add_option('-M', '--mongoversion', action='store', type='choice', dest='mongo_version', default=0, help='The MongoDB version you are talking with, either 2 or 3',
-
+    p.add_option('-a', '--authdb', action='store', type='string', dest='authdb', default='admin', help='The database you want to authenticate against')
 
     options, arguments = p.parse_args()
     host = options.host
@@ -155,6 +154,7 @@ def main(argv):
     user = options.user
     passwd = options.passwd
     authdb = options.authdb
+
     query_type = options.query_type
     collection = options.collection
     sample_time = options.sample_time
@@ -182,6 +182,7 @@ def main(argv):
     #
     start = time.time()
     err, con = mongo_connect(host, port, ssl, user, passwd, replicaset, authdb)
+
     if err != 0:
         return err
 
@@ -189,10 +190,6 @@ def main(argv):
     err, mongo_version = check_version(con)
     if err != 0:
         return err
-
-    # Legacy support for -M. If -M is set force mongo_version to that.
-    if options.mongo_version != 0:
-        mongo_version = int(options.mongo_version)
 
     conn_time = time.time() - start
     conn_time = round(conn_time, 0)
@@ -271,24 +268,42 @@ def main(argv):
 
 
 def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, replica=None, authdb="admin"):
+    from pymongo.errors import ConnectionFailure
+    from pymongo.errors import PyMongoError
+
     try:
         # ssl connection for pymongo > 2.3
         if pymongo.version >= "2.3":
             if replica is None:
                 con = pymongo.MongoClient(host, port)
             else:
-                con = pymongo.Connection(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl, replicaSet=replica, network_timeout=10)
+                con = pymongo.MongoClient(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl, replicaSet=replica)
         else:
             if replica is None:
-                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
+                con = pymongo.MongoClient(host, port, slave_okay=True)
             else:
-                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
+                con = pymongo.MongoClient(host, port, slave_okay=True)
                 #con = pymongo.Connection(host, port, slave_okay=True, replicaSet=replica, network_timeout=10)
+
+        try:
+          result = con.admin.command("ismaster")
+        except ConnectionFailure:
+          print("CRITICAL - Connection to Mongo server on %s:%s has failed" % (host, port) )
+          sys.exit(2)
+
+        if 'arbiterOnly' in result and result['arbiterOnly'] == True:
+            print "OK - State: 7 (Arbiter on port %s)" % (port)
+            sys.exit(0)
 
         if user and passwd:
             db = con[authdb]
-            if not db.authenticate(user, passwd):
+            try:
+              db.authenticate(user, password=passwd)
+            except PyMongoError:
                 sys.exit("Username/Password incorrect")
+
+        # get list of databases to check if the connection is working
+        #con.database_names()
     except Exception, e:
         if isinstance(e, pymongo.errors.AutoReconnect) and str(e).find(" is an arbiter") != -1:
             # We got a pymongo AutoReconnect exception that tells us we connected to an Arbiter Server
@@ -316,9 +331,10 @@ def exit_with_general_critical(e):
 
 
 def set_read_preference(db):
-    if pymongo.version >= "2.1":
+    if pymongo.version >= "2.2":
+        pymongo.read_preferences.Secondary
+    else:
         db.read_preference = pymongo.ReadPreference.SECONDARY
-
 
 def check_version(con):
     try:
@@ -326,7 +342,6 @@ def check_version(con):
     except Exception, e:
         return exit_with_general_critical(e), None
     return 0, int(server_info['version'].split('.')[0].strip())
-
 
 def check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time):
     warning = warning or 3
@@ -375,7 +390,7 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
     rs_status = {}
     slaveDelays = {}
     try:
-        set_read_preference(con.admin)
+        #set_read_preference(con.admin)
 
         # Get replica set status
         try:
@@ -661,8 +676,8 @@ def check_lock(con, warning, critical, perf_data, mongo_version):
             print "Couldn't get globalLock lockTime info from mongo, are you sure you're not using version 3? See the -M option."
             return exit_with_general_critical(e)
     else:
-        print "FAIL - Mongo3 doesn't report on global locks"
-        return 1
+        print "OK - MongoDB version 3 doesn't report on global locks"
+        return 0
 
 
 def check_flushing(con, warning, critical, avg, perf_data):
@@ -674,17 +689,22 @@ def check_flushing(con, warning, critical, avg, perf_data):
     critical = critical or 15000
     try:
         data = get_server_status(con)
-        if avg:
-            flush_time = float(data['backgroundFlushing']['average_ms'])
-            stat_type = "Average"
-        else:
-            flush_time = float(data['backgroundFlushing']['last_ms'])
-            stat_type = "Last"
+        try:
+            data['backgroundFlushing']
+            if avg:
+                flush_time = float(data['backgroundFlushing']['average_ms'])
+                stat_type = "Average"
+            else:
+                flush_time = float(data['backgroundFlushing']['last_ms'])
+                stat_type = "Last"
 
-        message = "%s Flush Time: %.2fms" % (stat_type, flush_time)
-        message += performance_data(perf_data, [("%.2fms" % flush_time, "%s_flush_time" % stat_type.lower(), warning, critical)])
+            message = "%s Flush Time: %.2fms" % (stat_type, flush_time)
+            message += performance_data(perf_data, [("%.2fms" % flush_time, "%s_flush_time" % stat_type.lower(), warning, critical)])
 
-        return check_levels(flush_time, warning, critical, message)
+            return check_levels(flush_time, warning, critical, message)
+        except Exception:
+            print "OK - flushing stats not available for this storage engine"
+            return 0
 
     except Exception, e:
         return exit_with_general_critical(e)
@@ -697,6 +717,7 @@ def index_miss_ratio(con, warning, critical, perf_data):
         data = get_server_status(con)
 
         try:
+            data['indexCounters']
             serverVersion = tuple(con.server_info()['version'].split('.'))
             if serverVersion >= tuple("2.4.0".split(".")):
                 miss_ratio = float(data['indexCounters']['missRatio'])
@@ -704,12 +725,17 @@ def index_miss_ratio(con, warning, critical, perf_data):
                 miss_ratio = float(data['indexCounters']['btree']['missRatio'])
         except KeyError:
             not_supported_msg = "not supported on this platform"
-            if data['indexCounters'].has_key('note'):
+            try:
+                data['indexCounters']
+                if data['indexCounters'].has_key('note'):
+                    print "OK - MongoDB says: " + not_supported_msg
+                    return 0
+                else:
+                    print "WARNING - Can't get counter from MongoDB"
+                    return 1
+            except Exception:
                 print "OK - MongoDB says: " + not_supported_msg
                 return 0
-            else:
-                print "WARNING - Can't get counter from MongoDB"
-                return 1
 
         message = "Miss Ratio: %.2f" % miss_ratio
         message += performance_data(perf_data, [("%.2f" % miss_ratio, "index_miss_ratio", warning, critical)])
@@ -1186,7 +1212,7 @@ def check_opcounters(con, host, warning, critical, perf_data):
         message = "Test succeeded , old values missing"
         message = "Opcounters: total=%d,insert=%d,query=%d,update=%d,delete=%d,getmore=%d,command=%d" % tuple(per_minute_delta)
         message += performance_data(perf_data, ([(per_minute_delta[0], "total", warning, critical), (per_minute_delta[1], "insert"),
-                    (per_minute_delta[2], "query"), (per_minute_delta[3], "update"), (per_minute_delta[5], "delete"),
+                    (per_minute_delta[2], "query"), (per_minute_delta[3], "update"), (per_minute_delta[4], "delete"),
                     (per_minute_delta[5], "getmore"), (per_minute_delta[6], "command")]))
         return check_levels(per_minute_delta[0], warning, critical, message)
     else:
@@ -1307,9 +1333,9 @@ def check_replica_primary(con, host, warning, critical, perf_data, replicaset, m
     if current_primary != saved_primary:
         last_primary_server_record = {"server": current_primary}
         if mongo_version == 2:
-            db.last_primary_server.update({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True, safe=True)
+            db.last_primary_server.update({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True)
         else:
-            db.last_primary_server.update_one({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True, safe=True)
+            db.last_primary_server.update_one({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True)
         message = "Primary server has changed from %s to %s" % (saved_primary, current_primary)
         primary_status = 1
     return check_levels(primary_status, warning, critical, message)
