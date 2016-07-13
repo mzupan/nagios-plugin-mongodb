@@ -146,6 +146,8 @@ def main(argv):
     p.add_option('-q', '--querytype', action='store', dest='query_type', default='query', help='The query type to check [query|insert|update|delete|getmore|command] from queries_per_second')
     p.add_option('-c', '--collection', action='store', dest='collection', default='admin', help='Specify the collection to check')
     p.add_option('-T', '--time', action='store', type='int', dest='sample_time', default=1, help='Time used to sample number of pages faults')
+    p.add_option('-M', '--mongoversion', action='store', type='choice', dest='mongo_version', default='2', help='The MongoDB version you are talking with, either 2 or 3',
+      choices=['2','3'])
     p.add_option('-a', '--authdb', action='store', type='string', dest='authdb', default='admin', help='The database you want to authenticate against')
 
     options, arguments = p.parse_args()
@@ -168,6 +170,7 @@ def main(argv):
     action = options.action
     perf_data = options.perf_data
     max_lag = options.max_lag
+    mongo_version = options.mongo_version
     database = options.database
     ssl = options.ssl
     replicaset = options.replicaset
