@@ -79,7 +79,7 @@ def performance_data(perf_data, params):
 
 
 def numeric_type(param):
-    if ((type(param) == float or type(param) == int or param == None)):
+    if ((type(param) == float or type(param) == int or type(param) == long or param == None)):
         return True
     return False
 
