@@ -241,7 +241,7 @@ def main(argv):
     elif action == "asserts":
         return check_asserts(con, host, port, warning, critical, perf_data)
     elif action == "replica_primary":
-        return check_replica_primary(con, host, port, warning, critical, perf_data, replicaset, mongo_version)
+        return check_replica_primary(con, host, warning, critical, perf_data, replicaset, mongo_version)
     elif action == "queries_per_second":
         return check_queries_per_second(con, query_type, warning, critical, perf_data, mongo_version)
     elif action == "page_faults":
