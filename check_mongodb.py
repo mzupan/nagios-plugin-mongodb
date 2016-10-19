@@ -190,9 +190,9 @@ def main(argv):
     if action == "connections":
         return check_connections(con, warning, critical, perf_data)
     elif action == "replication_lag":
-        return check_rep_lag(con, host, port, warning, critical, False, perf_data, max_lag, user, passwd)
+        return check_rep_lag(con, host, warning, critical, False, perf_data, max_lag, user, passwd)
     elif action == "replication_lag_percent":
-        return check_rep_lag(con, host, port, warning, critical, True, perf_data, max_lag, user, passwd)
+        return check_rep_lag(con, host, warning, critical, True, perf_data, max_lag, user, passwd)
     elif action == "replset_state":
         return check_replset_state(con, perf_data, warning, critical)
     elif action == "memory":
@@ -339,7 +339,7 @@ def check_connections(con, warning, critical, perf_data):
         return exit_with_general_critical(e)
 
 
-def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_lag, user, passwd):
+def check_rep_lag(con, host, warning, critical, percent, perf_data, max_lag, user, passwd):
     # Get mongo to tell us replica set member name when connecting locally
     if "127.0.0.1" == host:
         if not "me" in con.admin.command("ismaster","1").keys():
