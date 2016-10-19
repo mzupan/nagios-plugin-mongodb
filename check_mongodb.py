@@ -133,7 +133,7 @@ def main(argv):
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'memory_mapped', 'lock',
                           'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_indexes', 'collection_indexes', 'collection_size',
-                          'collection_storageSize', 'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary', 
+                          'collection_storageSize', 'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary',
                           'page_faults', 'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count', 'replset_quorum'])
     p.add_option('--max-lag', action='store_true', dest='max_lag', default=False, help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory', action='store_true', dest='mapped_memory', default=False, help='Get mapped memory instead of resident (if resident memory can not be read)')
@@ -344,7 +344,7 @@ def check_rep_lag(con, host, warning, critical, percent, perf_data, max_lag, use
     if "127.0.0.1" == host:
         if not "me" in con.admin.command("ismaster","1").keys():
             print "OK - This is not replicated MongoDB"
-            sys.exit(3)        
+            sys.exit(3)
 
         host = con.admin.command("ismaster","1")["me"].split(':')[0]
 
@@ -518,7 +518,7 @@ def check_memory(con, warning, critical, perf_data, mapped_memory, host):
     # memory used by Mongodb is ok or not.
     meminfo = open('/proc/meminfo').read()
     matched = re.search(r'^MemTotal:\s+(\d+)', meminfo)
-    if matched: 
+    if matched:
         mem_total_kB = int(matched.groups()[0])
 
     if host != "127.0.0.1" and not warning:
@@ -1031,7 +1031,7 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
             message = "First run of check.. no data"
             if mongo_version == "2":
                 db.nagios_check.insert({'check': 'query_counts', 'data': {query_type: {'count': num, 'ts': int(time.time())}}})
-            else:            
+            else:
                 db.nagios_check.insert_one({'check': 'query_counts', 'data': {query_type: {'count': num, 'ts': int(time.time())}}})
 
         return check_levels(query_per_sec, warning, critical, message)
@@ -1290,7 +1290,7 @@ def check_replica_primary(con, host, warning, critical, perf_data, replicaset, m
         last_primary_server_record = {"server": current_primary}
         if mongo_version == "2":
             db.last_primary_server.update({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True, safe=True)
-        else:        
+        else:
             db.last_primary_server.update_one({"_id": "last_primary"}, {"$set": last_primary_server_record}, upsert=True, safe=True)
         message = "Primary server has changed from %s to %s" % (saved_primary, current_primary)
         primary_status = 1
