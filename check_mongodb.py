@@ -149,6 +149,8 @@ def main(argv):
     p.add_option('-M', '--mongoversion', action='store', type='choice', dest='mongo_version', default='2', help='The MongoDB version you are talking with, either 2 or 3',
       choices=['2','3'])
     p.add_option('-a', '--authdb', action='store', type='string', dest='authdb', default='admin', help='The database you want to authenticate against')
+    p.add_option('--insecure', action='store_true', dest='insecure', default=False, help="Don't verify SSL/TLS certificates")
+    p.add_option('-f', '--ssl-cert-file', action='store', type='string', dest='cert_file', default=None, help='Path to PEM encoded key and cert for client authentication')
 
     options, arguments = p.parse_args()
     host = options.host
@@ -174,6 +176,8 @@ def main(argv):
     database = options.database
     ssl = options.ssl
     replicaset = options.replicaset
+    insecure = options.insecure
+    cert_file = options.cert_file
 
     if action == 'replica_primary' and replicaset is None:
         return "replicaset must be passed in when using replica_primary check"
@@ -184,7 +188,7 @@ def main(argv):
     # moving the login up here and passing in the connection
     #
     start = time.time()
-    err, con = mongo_connect(host, port, ssl, user, passwd, replicaset, authdb)
+    err, con = mongo_connect(host, port, ssl, user, passwd, replicaset, authdb, insecure, cert_file)
 
     if err != 0:
         return err
@@ -270,17 +274,29 @@ def main(argv):
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
 
-def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, replica=None, authdb="admin"):
+def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, replica=None, authdb="admin", insecure=False, ssl_cert=None):
     from pymongo.errors import ConnectionFailure
     from pymongo.errors import PyMongoError
+    import ssl as SSL
+
+    con_args = dict()
+
+    if ssl:
+        if insecure:
+            con_args['ssl_cert_reqs'] = SSL.CERT_NONE
+        else:
+            con_args['ssl_cert_reqs'] = SSL.CERT_REQUIRED
+        con_args['ssl'] = ssl
+        if ssl_cert:
+	    con_args['ssl_certfile'] = ssl_cert
 
     try:
         # ssl connection for pymongo > 2.3
         if pymongo.version >= "2.3":
             if replica is None:
-                con = pymongo.MongoClient(host, port)
+                con = pymongo.MongoClient(host, port, **con_args)
             else:
-                con = pymongo.MongoClient(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl, replicaSet=replica)
+                con = pymongo.MongoClient(host, port, read_preference=pymongo.ReadPreference.SECONDARY, replicaSet=replica, **con_args)
         else:
             if replica is None:
                 con = pymongo.MongoClient(host, port, slave_okay=True)
