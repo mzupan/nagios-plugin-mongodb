@@ -279,18 +279,24 @@ def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, repli
     from pymongo.errors import PyMongoError
     import ssl as SSL
 
-    if insecure:
-        cert_opts = SSL.CERT_NONE
-    else:
-        cert_opts = SSL.CERT_REQUIRED
+    con_args = dict()
+
+    if ssl:
+        if insecure:
+            con_args['ssl_cert_reqs'] = SSL.CERT_NONE
+        else:
+            con_args['ssl_cert_reqs'] = SSL.CERT_REQUIRED
+        con_args['ssl'] = ssl
+        if ssl_cert:
+	    con_args['ssl_certfile'] = ssl_cert
 
     try:
         # ssl connection for pymongo > 2.3
         if pymongo.version >= "2.3":
             if replica is None:
-                con = pymongo.MongoClient(host, port, ssl=True, ssl_certfile=ssl_cert, ssl_cert_reqs=cert_opts)
+                con = pymongo.MongoClient(host, port, **con_args)
             else:
-                con = pymongo.MongoClient(host, port, read_preference=pymongo.ReadPreference.SECONDARY, ssl=ssl, replicaSet=replica)
+                con = pymongo.MongoClient(host, port, read_preference=pymongo.ReadPreference.SECONDARY, replicaSet=replica, **con_args)
         else:
             if replica is None:
                 con = pymongo.MongoClient(host, port, slave_okay=True)
