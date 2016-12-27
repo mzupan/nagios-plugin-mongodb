@@ -25,6 +25,10 @@ Then use pip to ensure you have all pre-requisites.
 
 <pre><code>pip install requirements</code></pre>
 
+Alternatively, install directly through pip:
+
+`pip install git+https://github.com/mzupan/nagios-plugin-mongodb.git`
+
 ## Usage
 
 ### Install in Nagios
