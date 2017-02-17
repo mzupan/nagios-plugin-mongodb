@@ -288,7 +288,7 @@ def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, repli
             con_args['ssl_cert_reqs'] = SSL.CERT_REQUIRED
         con_args['ssl'] = ssl
         if ssl_cert:
-	    con_args['ssl_certfile'] = ssl_cert
+            con_args['ssl_certfile'] = ssl_cert
 
     try:
         # ssl connection for pymongo > 2.3
