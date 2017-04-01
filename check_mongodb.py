@@ -204,9 +204,9 @@ def main(argv):
     if action == "connections":
         return check_connections(con, warning, critical, perf_data)
     elif action == "replication_lag":
-        return check_rep_lag(con, host, warning, critical, False, perf_data, max_lag, user, passwd)
+        return check_rep_lag(con, host, warning, critical, False, perf_data, max_lag, user, passwd, authdb)
     elif action == "replication_lag_percent":
-        return check_rep_lag(con, host, warning, critical, True, perf_data, max_lag, user, passwd, ssl, insecure, cert_file)
+        return check_rep_lag(con, host, warning, critical, True, perf_data, max_lag, user, passwd, authdb, ssl, insecure, cert_file)
     elif action == "replset_state":
         return check_replset_state(con, perf_data, warning, critical)
     elif action == "memory":
@@ -389,7 +389,7 @@ def check_connections(con, warning, critical, perf_data):
         return exit_with_general_critical(e)
 
 
-def check_rep_lag(con, host, warning, critical, percent, perf_data, max_lag, user, passwd, ssl=None, insecure=None, cert_file=None):
+def check_rep_lag(con, host, warning, critical, percent, perf_data, max_lag, user, passwd, authdb="admin", ssl=None, insecure=None, cert_file=None):
     # Get mongo to tell us replica set member name when connecting locally
     if "127.0.0.1" == host:
         if not "me" in con.admin.command("ismaster","1").keys():
@@ -498,7 +498,7 @@ def check_rep_lag(con, host, warning, critical, percent, perf_data, max_lag, use
                 lag = float(optime_lag.seconds + optime_lag.days * 24 * 3600)
 
             if percent:
-                err, con = mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]), ssl, user, passwd, None, None, insecure, cert_file)
+                err, con = mongo_connect(primary_node['name'].split(':')[0], int(primary_node['name'].split(':')[1]), ssl, user, passwd, None, authdb, insecure, cert_file)
                 if err != 0:
                     return err
                 primary_timediff = replication_get_time_diff(con)
