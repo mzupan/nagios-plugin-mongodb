@@ -810,35 +810,53 @@ def check_replset_state(con, perf_data, warning="", critical=""):
                 data = con.admin.command(pymongo.son_manipulator.SON([('replSetGetStatus', 1)]))
             except:
                 data = con.admin.command(son.SON([('replSetGetStatus', 1)]))
-            state = int(data['myState'])
+            members = data['members'];
+            message = ""
+            my_state = int(data['myState'])
+            worst_state = my_state
+            for member in members:
+                their_state = int(member['state'])
+                message += " %s: %i (%s)" % (member['name'], their_state, state_text(their_state))
+                if state_is_worse(their_state, worst_state, warning, critical):
+                    worst_state = their_state;
+            message += performance_data(perf_data, [(my_state, "state")])
+
         except pymongo.errors.OperationFailure, e:
             if ((e.code == None and str(e).find('failed: not running with --replSet"')) or (e.code == 76 and str(e).find('not running with --replSet"'))):
                 state = -1
 
-        if state == 8:
-            message = "State: %i (Down)" % state
-        elif state == 4:
-            message = "State: %i (Fatal error)" % state
-        elif state == 0:
-            message = "State: %i (Starting up, phase1)" % state
-        elif state == 3:
-            message = "State: %i (Recovering)" % state
-        elif state == 5:
-            message = "State: %i (Starting up, phase2)" % state
-        elif state == 1:
-            message = "State: %i (Primary)" % state
-        elif state == 2:
-            message = "State: %i (Secondary)" % state
-        elif state == 7:
-            message = "State: %i (Arbiter)" % state
-        elif state == -1:
-            message = "Not running with replSet"
-        else:
-            message = "State: %i (Unknown state)" % state
-        message += performance_data(perf_data, [(state, "state")])
-        return check_levels(state, warning, critical, message, ok)
+        return check_levels(worst_state, warning, critical, message, ok)
     except Exception, e:
         return exit_with_general_critical(e)
+
+def state_is_worse(state, worst_state, warning, critical):
+    if worst_state in critical:
+        return False
+    if worst_state in warning:
+        return state in critical
+    return (state in warning) or (state in critical)
+
+def state_text(state):
+    if state == 8:
+        return "Down"
+    elif state == 4:
+        return "Fatal error"
+    elif state == 0:
+        return "Starting up, phase1"
+    elif state == 3:
+        return "Recovering"
+    elif state == 5:
+        return "Starting up, phase2"
+    elif state == 1:
+        return  "Primary"
+    elif state == 2:
+        return  "Secondary"
+    elif state == 7:
+        return  "Arbiter"
+    elif state == -1:
+        return  "Not running with replSet"
+    else:
+        return  "Unknown state"
 
 
 def check_databases(con, warning, critical, perf_data=None):
