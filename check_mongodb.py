@@ -18,7 +18,7 @@
 #   - @Andor on github
 #   - Steven Richards - Captainkrtek on github
 #   - Max Vernimmen - @mvernimmen-CG / @mvernimmen on github
-#   - Kris Childress - @kris@nivenly.com github.com/kris-nova
+#   - Kris Nova - @kris@nivenly.com github.com/kris-nova
 #
 # USAGE
 #
