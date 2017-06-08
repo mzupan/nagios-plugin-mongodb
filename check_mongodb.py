@@ -1138,7 +1138,7 @@ def check_oplog(con, warning, critical, perf_data):
     try:
         db = con.local
         ol = db.system.namespaces.find_one({"name": "local.oplog.rs"})
-        if (db.system.namespaces.find_one({"name": "local.oplog.rs"}) != None):
+        if (ol == None):
             oplog = "oplog.rs"
         else:
             ol = db.system.namespaces.find_one({"name": "local.oplog.$main"})
