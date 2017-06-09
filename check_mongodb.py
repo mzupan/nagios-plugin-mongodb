@@ -1138,7 +1138,7 @@ def check_oplog(con, warning, critical, perf_data):
     try:
         db = con.local
         ol = db.system.namespaces.find_one({"name": "local.oplog.rs"})
-        if (db.system.namespaces.find_one({"name": "local.oplog.rs"}) != None):
+        if (ol == None):
             oplog = "oplog.rs"
         else:
             ol = db.system.namespaces.find_one({"name": "local.oplog.$main"})
@@ -1155,7 +1155,10 @@ def check_oplog(con, warning, critical, perf_data):
                 data = con.admin.command(son.SON([('collstats', oplog)]))
 
         ol_size = data['size']
-        ol_storage_size = data['storageSize']
+        if 'maxSize' in data:
+            ol_storage_size = data['maxSize']
+        elif 'capped' in data and 'storageSize' in data:
+            ol_storage_size = data['storageSize']
         ol_used_storage = int(float(ol_size) / ol_storage_size * 100 + 1)
         ol = con.local[oplog]
         firstc = ol.find().sort("$natural", pymongo.ASCENDING).limit(1)[0]['ts']
