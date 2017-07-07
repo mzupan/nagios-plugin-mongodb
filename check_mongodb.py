@@ -133,7 +133,7 @@ def main(argv):
     p.add_option('-C', '--critical', action='store', dest='critical', default=None, help='The critical threshold you want to set')
     p.add_option('-A', '--action', action='store', type='choice', dest='action', default='connect', help='The action you want to take',
                  choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'memory_mapped', 'lock',
-                          'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_indexes', 'collection_indexes', 'collection_size',
+                          'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_indexes', 'collection_documents', 'collection_indexes', 'collection_size',
                           'collection_storageSize', 'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary',
                           'page_faults', 'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count', 'replset_quorum'])
     p.add_option('--max-lag', action='store_true', dest='max_lag', default=False, help='Get max replication lag (for replication_lag action only)')
@@ -242,6 +242,8 @@ def main(argv):
             return check_database_size(con, database, warning, critical, perf_data)
     elif action == "database_indexes":
         return check_database_indexes(con, database, warning, critical, perf_data)
+    elif action == "collection_documents":
+        return check_collection_documents(con, database, collection, warning, critical, perf_data)
     elif action == "collection_indexes":
         return check_collection_indexes(con, database, collection, warning, critical, perf_data)
     elif action == "collection_size":
@@ -970,6 +972,28 @@ def check_database_indexes(con, database, warning, critical, perf_data):
             return 1
         else:
             print "OK - %s indexSize: %.0f MB %s" % (database, index_size, perfdata)
+            return 0
+    except Exception, e:
+        return exit_with_general_critical(e)
+
+
+def check_collection_documents(con, database, collection, warning, critical, perf_data):
+    perfdata = ""
+    try:
+        set_read_preference(con.admin)
+        data = con[database].command('collstats', collection)
+        documents = data['count']
+        if perf_data:
+            perfdata += " | collection_documents=%i;%i;%i" % (documents, warning, critical)
+
+        if documents >= critical:
+            print "CRITICAL - %s.%s documents: %s %s" % (database, collection, documents, perfdata)
+            return 2
+        elif documents >= warning:
+            print "WARNING - %s.%s documents: %s %s" % (database, collection, documents, perfdata)
+            return 1
+        else:
+            print "OK - %s.%s documents: %s %s" % (database, collection, documents, perfdata)
             return 0
     except Exception, e:
         return exit_with_general_critical(e)
