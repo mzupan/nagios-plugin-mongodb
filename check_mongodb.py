@@ -310,10 +310,9 @@ def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, repli
                 con = pymongo.MongoClient(host, port, read_preference=pymongo.ReadPreference.SECONDARY, replicaSet=replica, **con_args)
         else:
             if replica is None:
-                con = pymongo.MongoClient(host, port, slave_okay=True)
+                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
             else:
-                con = pymongo.MongoClient(host, port, slave_okay=True)
-                #con = pymongo.Connection(host, port, slave_okay=True, replicaSet=replica, network_timeout=10)
+                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
 
         try:
           result = con.admin.command("ismaster")
