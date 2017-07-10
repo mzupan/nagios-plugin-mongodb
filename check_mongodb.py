@@ -19,6 +19,7 @@
 #   - Steven Richards - Captainkrtek on github
 #   - Max Vernimmen - @mvernimmen-CG / @mvernimmen on github
 #   - Kris Nova - @kris@nivenly.com github.com/kris-nova
+#   - Jan Kantert - firstname@lastname.net
 #
 # USAGE
 #
