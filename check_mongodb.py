@@ -403,8 +403,8 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
     # Get mongo to tell us replica set member name when connecting locally
     if "127.0.0.1" == host:
         if not "me" in con.admin.command("ismaster","1").keys():
-            print "OK - This is not replicated MongoDB"
-            sys.exit(3)
+            print "UNKNOWN - This is not replicated MongoDB"
+            return 3
 
         host = con.admin.command("ismaster","1")["me"].split(':')[0]
 
@@ -424,8 +424,8 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
             rs_status = con.admin.command("replSetGetStatus")
         except pymongo.errors.OperationFailure, e:
             if ((e.code == None and str(e).find('failed: not running with --replSet"')) or (e.code == 76 and str(e).find('not running with --replSet"'))):
-                print "OK - Not running with replSet"
-                return 0
+                print "UNKNOWN - Not running with replSet"
+                return 3
 
         serverVersion = tuple(con.server_info()['version'].split('.'))
         if serverVersion >= tuple("2.0.0".split(".")):
@@ -488,8 +488,8 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
                         message += performance_data(perf_data, [(maximal_lag, "replication_lag", warning, critical)])
                     return check_levels(maximal_lag, warning, critical, message)
             elif host_node["stateStr"] == "ARBITER":
-                print "OK - This is an arbiter"
-                return 0
+                print "UNKNOWN - This is an arbiter"
+                return 3
 
             # Find the difference in optime between current node and PRIMARY
 
