@@ -126,7 +126,9 @@ def main(argv):
     p = optparse.OptionParser(conflict_handler="resolve", description="This Nagios plugin checks the health of mongodb.")
 
     p.add_option('-H', '--host', action='store', type='string', dest='host', default='127.0.0.1', help='The hostname you want to connect to')
+    p.add_option('-h', '--host-to-check', action='store', type='string', dest='host_to_check', default=None, help='The hostname you want to check (if this is different from the host you are connecting)')
     p.add_option('-P', '--port', action='store', type='int', dest='port', default=27017, help='The port mongodb is running on')
+    p.add_option('--port-to-check', action='store', type='int', dest='port_to_check', default=None, help='The port you want to check (if this is different from the port you are connecting)')
     p.add_option('-u', '--user', action='store', type='string', dest='user', default=None, help='The username you want to login as')
     p.add_option('-p', '--pass', action='store', type='string', dest='passwd', default=None, help='The password you want to use for that user')
     p.add_option('-W', '--warning', action='store', dest='warning', default=None, help='The warning threshold you want to set')
@@ -155,7 +157,9 @@ def main(argv):
 
     options, arguments = p.parse_args()
     host = options.host
+    host_to_check = options.host_to_check if options.host_to_check else options.host
     port = options.port
+    port_to_check = options.port_to_check if options.port_to_check else options.port
     user = options.user
     passwd = options.passwd
     authdb = options.authdb
@@ -206,9 +210,9 @@ def main(argv):
     if action == "connections":
         return check_connections(con, warning, critical, perf_data)
     elif action == "replication_lag":
-        return check_rep_lag(con, host, warning, critical, False, perf_data, max_lag, user, passwd)
+        return check_rep_lag(con, host_to_check, port_to_check, warning, critical, False, perf_data, max_lag, user, passwd)
     elif action == "replication_lag_percent":
-        return check_rep_lag(con, host, warning, critical, True, perf_data, max_lag, user, passwd, ssl, insecure, ssl_ca_cert_file, cert_file)
+        return check_rep_lag(con, host_to_check, port_to_check, warning, critical, True, perf_data, max_lag, user, passwd, ssl, insecure, ssl_ca_cert_file, cert_file)
     elif action == "replset_state":
         return check_replset_state(con, perf_data, warning, critical)
     elif action == "memory":
@@ -395,7 +399,7 @@ def check_connections(con, warning, critical, perf_data):
         return exit_with_general_critical(e)
 
 
-def check_rep_lag(con, host, warning, critical, percent, perf_data, max_lag, user, passwd, ssl=None, insecure=None, ssl_ca_cert_file=None, cert_file=None):
+def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_lag, user, passwd, ssl=None, insecure=None, ssl_ca_cert_file=None, cert_file=None):
     # Get mongo to tell us replica set member name when connecting locally
     if "127.0.0.1" == host:
         if not "me" in con.admin.command("ismaster","1").keys():
@@ -442,7 +446,7 @@ def check_rep_lag(con, host, warning, critical, percent, perf_data, max_lag, use
             for member in rs_status["members"]:
                 if member["stateStr"] == "PRIMARY":
                     primary_node = member
-                if member.get('self') == True:
+                if member.get('name') == "{}:{}".format(host, port):
                     host_node = member
 
             # Check if we're in the middle of an election and don't have a primary
