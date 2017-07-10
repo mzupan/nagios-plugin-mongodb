@@ -237,7 +237,7 @@ def main(argv):
     elif action == "collections":
         return check_collections(con, warning, critical, perf_data)
     elif action == "oplog":
-        return check_oplog(con, warning, critical, perf_data)
+        return check_oplog(con, warning, critical, perf_data, mongo_version)
     elif action == "journal_commits_in_wl":
         return check_journal_commits_in_wl(con, warning, critical, perf_data)
     elif action == "database_size":
@@ -310,9 +310,9 @@ def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, repli
                 con = pymongo.MongoClient(host, port, read_preference=pymongo.ReadPreference.SECONDARY, replicaSet=replica, **con_args)
         else:
             if replica is None:
-                con = pymongo.MongoClient(host, port, slave_okay=True)
+                con = pymongo.Connection(host, port, slave_okay=True)
             else:
-                con = pymongo.MongoClient(host, port, slave_okay=True)
+                con = pymongo.Connection(host, port, slave_okay=True)
                 #con = pymongo.Connection(host, port, slave_okay=True, replicaSet=replica, network_timeout=10)
 
         try:
@@ -1156,7 +1156,7 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
         return exit_with_general_critical(e)
 
 
-def check_oplog(con, warning, critical, perf_data):
+def check_oplog(con, warning, critical, perf_data, mongo_version):
     """ Checking the oplog time - the time of the log currntly saved in the oplog collection
     defaults:
         critical 4 hours
@@ -1167,12 +1167,14 @@ def check_oplog(con, warning, critical, perf_data):
     try:
         db = con.local
         ol = db.system.namespaces.find_one({"name": "local.oplog.rs"})
-        if (db.system.namespaces.find_one({"name": "local.oplog.rs"}) != None):
+        if (ol is not None):
             oplog = "oplog.rs"
         else:
             ol = db.system.namespaces.find_one({"name": "local.oplog.$main"})
-            if (db.system.namespaces.find_one({"name": "local.oplog.$main"}) != None):
+            if (ol is not None):
                 oplog = "oplog.$main"
+            elif mongo_version == 3:
+                oplog = "oplog.rs"
             else:
                 message = "neither master/slave nor replica set replication detected"
                 return check_levels(None, warning, critical, message)
@@ -1184,11 +1186,20 @@ def check_oplog(con, warning, critical, perf_data):
                 data = con.admin.command(son.SON([('collstats', oplog)]))
 
         ol_size = data['size']
-        ol_storage_size = data['storageSize']
+        from pprint import pprint
+        pprint(data)
+        if 'maxSize' in data:
+            ol_storage_size = data['maxSize']
+        elif 'capped' in data and 'storageSize' in data:
+            print "Merde"
+            ol_storage_size = ol['options']['size']
         ol_used_storage = int(float(ol_size) / ol_storage_size * 100 + 1)
         ol = con.local[oplog]
         firstc = ol.find().sort("$natural", pymongo.ASCENDING).limit(1)[0]['ts']
         lastc = ol.find().sort("$natural", pymongo.DESCENDING).limit(1)[0]['ts']
+        print "ol_storage_size: {}".format(ol_storage_size / (1024 * 1024))
+        print "firstc: {}".format(firstc.as_datetime())
+        print "lastc: {}".format(lastc.as_datetime())
         time_in_oplog = (lastc.as_datetime() - firstc.as_datetime())
         message = "Oplog saves " + str(time_in_oplog) + " %d%% used" % ol_used_storage
         try:  # work starting from python2.7
@@ -1197,7 +1208,7 @@ def check_oplog(con, warning, critical, perf_data):
             hours_in_oplog = float(time_in_oplog.seconds + time_in_oplog.days * 24 * 3600) / 60 / 60
         approx_level = hours_in_oplog * 100 / ol_used_storage
         message += performance_data(perf_data, [("%.2f" % hours_in_oplog, 'oplog_time', warning, critical), ("%.2f " % approx_level, 'oplog_time_100_percent_used')])
-        return check_levels(-approx_level, -warning, -critical, message)
+        return check_levels(-hours_in_oplog, -warning, -critical, message)
 
     except Exception, e:
         return exit_with_general_critical(e)
