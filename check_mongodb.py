@@ -757,12 +757,12 @@ def index_miss_ratio(con, warning, critical, perf_data):
             not_supported_msg = "not supported on this platform"
             try:
                 data['indexCounters']
-            if data['indexCounters'].has_key('note'):
-                print "OK - MongoDB says: " + not_supported_msg
-                return 0
-            else:
-                print "WARNING - Can't get counter from MongoDB"
-                return 1
+                if data['indexCounters'].has_key('note'):
+                    print "OK - MongoDB says: " + not_supported_msg
+                    return 0
+                else:
+                    print "WARNING - Can't get counter from MongoDB"
+                    return 1
             except Exception:
                 print "OK - MongoDB says: " + not_supported_msg
                 return 0
