@@ -331,6 +331,9 @@ def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, repli
             except PyMongoError:
                 sys.exit("Username/Password incorrect")
 
+        # Ping to check that the server is responding.
+        con.admin.command("ping")
+
     except Exception, e:
         if isinstance(e, pymongo.errors.AutoReconnect) and str(e).find(" is an arbiter") != -1:
             # We got a pymongo AutoReconnect exception that tells us we connected to an Arbiter Server
@@ -810,6 +813,8 @@ def check_replset_state(con, perf_data, warning="", critical=""):
 
     ok = range(-1, 8)  # should include the range of all posiible values
     try:
+        worst_state = -2
+        message = ""
         try:
             try:
                 set_read_preference(con.admin)
@@ -817,7 +822,6 @@ def check_replset_state(con, perf_data, warning="", critical=""):
             except:
                 data = con.admin.command(son.SON([('replSetGetStatus', 1)]))
             members = data['members'];
-            message = ""
             my_state = int(data['myState'])
             worst_state = my_state
             for member in members:
@@ -829,7 +833,7 @@ def check_replset_state(con, perf_data, warning="", critical=""):
 
         except pymongo.errors.OperationFailure, e:
             if ((e.code == None and str(e).find('failed: not running with --replSet"')) or (e.code == 76 and str(e).find('not running with --replSet"'))):
-                state = -1
+                worst_state = -1
 
         return check_levels(worst_state, warning, critical, message, ok)
     except Exception, e:
