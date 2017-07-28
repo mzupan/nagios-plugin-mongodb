@@ -813,6 +813,7 @@ def check_replset_state(con, perf_data, warning="", critical=""):
 
     ok = range(-1, 8)  # should include the range of all posiible values
     try:
+        worst_state = -2
         try:
             try:
                 set_read_preference(con.admin)
@@ -832,7 +833,7 @@ def check_replset_state(con, perf_data, warning="", critical=""):
 
         except pymongo.errors.OperationFailure, e:
             if ((e.code == None and str(e).find('failed: not running with --replSet"')) or (e.code == 76 and str(e).find('not running with --replSet"'))):
-                state = -1
+                worst_state = -1
 
         return check_levels(worst_state, warning, critical, message, ok)
     except Exception, e:
