@@ -1550,7 +1550,7 @@ def build_file_name(host, port, action):
     module_name = re.match('(.*//*)*(.*)\..*', __file__).group(2)
 
     if (port == 27017):
-    return "/tmp/" + module_name + "_data/" + host + "-" + action + ".data"
+        return "/tmp/" + module_name + "_data/" + host + "-" + action + ".data"
     else:
         return "/tmp/" + module_name + "_data/" + host + "-" + str(port) + "-" + action + ".data"
 
