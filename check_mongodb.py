@@ -846,25 +846,25 @@ def state_is_worse(state, worst_state, warning, critical):
     return (state in warning) or (state in critical)
 
 def state_text(state):
-        if state == 8:
+    if state == 8:
         return "Down"
-        elif state == 4:
+    elif state == 4:
         return "Fatal error"
-        elif state == 0:
+    elif state == 0:
         return "Starting up, phase1"
-        elif state == 3:
+    elif state == 3:
         return "Recovering"
-        elif state == 5:
+    elif state == 5:
         return "Starting up, phase2"
-        elif state == 1:
+    elif state == 1:
         return  "Primary"
-        elif state == 2:
+    elif state == 2:
         return  "Secondary"
-        elif state == 7:
+    elif state == 7:
         return  "Arbiter"
-        elif state == -1:
+    elif state == -1:
         return  "Not running with replSet"
-        else:
+    else:
         return  "Unknown state"
 
 
