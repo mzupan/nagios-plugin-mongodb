@@ -721,17 +721,17 @@ def check_flushing(con, warning, critical, avg, perf_data):
         data = get_server_status(con)
         try:
             data['backgroundFlushing']
-        if avg:
-            flush_time = float(data['backgroundFlushing']['average_ms'])
-            stat_type = "Average"
-        else:
-            flush_time = float(data['backgroundFlushing']['last_ms'])
-            stat_type = "Last"
+            if avg:
+                flush_time = float(data['backgroundFlushing']['average_ms'])
+                stat_type = "Average"
+            else:
+                flush_time = float(data['backgroundFlushing']['last_ms'])
+                stat_type = "Last"
 
-        message = "%s Flush Time: %.2fms" % (stat_type, flush_time)
-        message += performance_data(perf_data, [("%.2fms" % flush_time, "%s_flush_time" % stat_type.lower(), warning, critical)])
+            message = "%s Flush Time: %.2fms" % (stat_type, flush_time)
+            message += performance_data(perf_data, [("%.2fms" % flush_time, "%s_flush_time" % stat_type.lower(), warning, critical)])
 
-        return check_levels(flush_time, warning, critical, message)
+            return check_levels(flush_time, warning, critical, message)
         except Exception:
             print "OK - flushing stats not available for this storage engine"
             return 0
