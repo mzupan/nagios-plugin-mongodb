@@ -814,6 +814,7 @@ def check_replset_state(con, perf_data, warning="", critical=""):
     ok = range(-1, 8)  # should include the range of all posiible values
     try:
         worst_state = -2
+        message = ""
         try:
             try:
                 set_read_preference(con.admin)
@@ -821,7 +822,6 @@ def check_replset_state(con, perf_data, warning="", critical=""):
             except:
                 data = con.admin.command(son.SON([('replSetGetStatus', 1)]))
             members = data['members'];
-            message = ""
             my_state = int(data['myState'])
             worst_state = my_state
             for member in members:
