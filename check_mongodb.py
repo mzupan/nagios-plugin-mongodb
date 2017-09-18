@@ -1169,15 +1169,18 @@ def check_oplog(con, warning, critical, perf_data):
     critical = critical or 4
     try:
         db = con.local
-        ol = db.system.namespaces.find_one({"name": "local.oplog.rs"})
-        if (db.system.namespaces.find_one({"name": "local.oplog.rs"}) != None):
+
+        # check if replicaset member
+        ol = db.oplog.rs.find_one()
+        if ( ol != None):
             oplog = "oplog.rs"
         else:
-            ol = db.system.namespaces.find_one({"name": "local.oplog.$main"})
-            if (db.system.namespaces.find_one({"name": "local.oplog.$main"}) != None):
-                oplog = "oplog.$main"
+            # check if master/slave setup
+            ol = "db.oplog.$main.find_one()"
+            if ( ol != None):
+                oplog = 'oplog.$main'
             else:
-                message = "neither master/slave nor replica set replication detected"
+                message = "neither master/slave nor replica set replication detected. Could not determine oplog location"
                 return check_levels(None, warning, critical, message)
 
         try:
@@ -1187,8 +1190,8 @@ def check_oplog(con, warning, critical, perf_data):
                 data = con.admin.command(son.SON([('collstats', oplog)]))
 
         ol_size = data['size']
-        ol_storage_size = data['storageSize']
-        ol_used_storage = int(float(ol_size) / ol_storage_size * 100 + 1)
+        ol_storage_size = data['maxSize']
+        ol_used_storage = int(float(ol_size) / float(ol_storage_size) * 100 + 1)
         ol = con.local[oplog]
         firstc = ol.find().sort("$natural", pymongo.ASCENDING).limit(1)[0]['ts']
         lastc = ol.find().sort("$natural", pymongo.DESCENDING).limit(1)[0]['ts']
