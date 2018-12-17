@@ -314,6 +314,10 @@ def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, repli
             else:
                 con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
 
+        # we must authenticate the connection, otherwise we won't be able to perform certain operations
+        if ssl_cert and ssl_ca_cert_file and user:
+            con.the_database.authenticate(user, mechanism='MONGODB-X509')
+
         try:
           result = con.admin.command("ismaster")
         except ConnectionFailure:
