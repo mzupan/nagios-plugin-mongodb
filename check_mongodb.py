@@ -206,7 +206,6 @@ def main(argv):
         return err
 
     conn_time = time.time() - start
-    conn_time = round(conn_time, 0)
 
     if action == "connections":
         return check_connections(con, warning, critical, perf_data)
@@ -380,7 +379,7 @@ def check_version(con):
 def check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time):
     warning = warning or 3
     critical = critical or 6
-    message = "Connection took %i seconds" % conn_time
+    message = "Connection took %.3f seconds" % conn_time
     message += performance_data(perf_data, [(conn_time, "connection_time", warning, critical)])
 
     return check_levels(conn_time, warning, critical, message)
