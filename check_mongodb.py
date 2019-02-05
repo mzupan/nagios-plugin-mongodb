@@ -155,6 +155,8 @@ def main(argv):
     p.add_option('--insecure', action='store_true', dest='insecure', default=False, help="Don't verify SSL/TLS certificates")
     p.add_option('--ssl-ca-cert-file', action='store', type='string', dest='ssl_ca_cert_file', default=None, help='Path to Certificate Authority file for SSL')
     p.add_option('-f', '--ssl-cert-file', action='store', type='string', dest='cert_file', default=None, help='Path to PEM encoded key and cert for client authentication')
+    p.add_option('-m','--auth-mechanism', action='store', type='choice', dest='auth_mechanism', default=None, help='Auth mechanism used for auth with mongodb',
+    choices=['MONGODB-X509','SCRAM-SHA-256','SCRAM-SHA-1'])
 
     options, arguments = p.parse_args()
     host = options.host
@@ -185,6 +187,7 @@ def main(argv):
     insecure = options.insecure
     ssl_ca_cert_file = options.ssl_ca_cert_file
     cert_file = options.cert_file
+    auth_mechanism = options.auth_mechanism
 
     if action == 'replica_primary' and replicaset is None:
         return "replicaset must be passed in when using replica_primary check"
@@ -282,7 +285,7 @@ def main(argv):
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
 
-def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, replica=None, authdb="admin", insecure=False, ssl_ca_cert_file=None, ssl_cert=None):
+def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, replica=None, authdb="admin", insecure=False, ssl_ca_cert_file=None, ssl_cert=None, auth_mechanism=None):
     from pymongo.errors import ConnectionFailure
     from pymongo.errors import PyMongoError
     import ssl as SSL
@@ -314,7 +317,11 @@ def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, repli
                 con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
 
         # we must authenticate the connection, otherwise we won't be able to perform certain operations
-        if ssl_cert and ssl_ca_cert_file and user:
+        if ssl_cert and ssl_ca_cert_file and user and auth_mechanism == 'SCRAM-SHA-256':
+            con.the_database.authenticate(user, mechanism='SCRAM-SHA-256')
+        elif ssl_cert and ssl_ca_cert_file and user and auth_mechanism == 'SCRAM-SHA-1':
+            con.the_database.authenticate(user, mechanism='SCRAM-SHA-1')
+        elif ssl_cert and ssl_ca_cert_file and user and auth_mechanism == 'MONGODB-X509':
             con.the_database.authenticate(user, mechanism='MONGODB-X509')
 
         try:
