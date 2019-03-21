@@ -819,34 +819,33 @@ def check_replset_state(con, perf_data, warning="", critical=""):
     try:
         critical = [int(x) for x in critical.split(",")]
     except:
-        critical = [8, 4, -1, -2]
+        critical = [8, 4, -1]
 
-    ok = list(range(-2, 8))  # should include the range of all possible values
+    ok = list(range(-1, 8))  # should include the range of all possible values
     try:
-        worst_state = -3
+        worst_state = -1
         message = ""
+        data = []
         try:
-            try:
-                set_read_preference(con.admin)
-                data = con.admin.command(pymongo.son_manipulator.SON([('replSetGetStatus', 1)]))
-            except:
-                data = con.admin.command(son.SON([('replSetGetStatus', 1)]))
-            members = data['members']
-            my_state = int(data['myState'])
-            worst_state = my_state
-            for member in members:
-                their_state = int(member['state'])
-                message += " %s: %i (%s)" % (member['name'], their_state, state_text(their_state))
-                if state_is_worse(their_state, worst_state, warning, critical):
-                    worst_state = their_state
-            message += performance_data(perf_data, [(my_state, "state")])
+
+            set_read_preference(con.admin)
+            data = con.admin.command("replSetGetStatus", check=False)
+            if(data['ok'] == 1):
+                members = data['members']
+                my_state = int(data['myState'])
+                worst_state = my_state
+                for member in members:
+                    their_state = int(member['state'])
+                    message += " %s: %i (%s)" % (member['name'], their_state, state_text(their_state))
+                    if state_is_worse(their_state, worst_state, warning, critical):
+                        worst_state = their_state
+                message += performance_data(perf_data, [(my_state, "state")])
+            else:
+                message += data['errmsg']
 
         except pymongo.errors.OperationFailure as e:
-            if ((e.code == None and str(e).find('failed: not running with --replSet"')) or (e.code == 76 and str(e).find('not running with --replSet"'))):
-                worst_state = -1
-            if e.code==93 and str(e).find('config is invalid or we are not a member"'):
-                worst_state = -2
-            message += state_text(worst_state)
+            worst_state = -1
+            message += str(e)
 
         return check_levels(worst_state, warning, critical, message, ok)
     except Exception as e:
@@ -876,10 +875,6 @@ def state_text(state):
         return  "Secondary"
     elif state == 7:
         return  "Arbiter"
-    elif state == -1:
-        return  "Not running with replSet"
-    elif state == -2:
-        return  "ReplSet config is invalid or we are not a member of it"
     else:
         return  "Unknown state"
 
