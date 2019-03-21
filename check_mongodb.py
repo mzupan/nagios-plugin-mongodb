@@ -819,11 +819,11 @@ def check_replset_state(con, perf_data, warning="", critical=""):
     try:
         critical = [int(x) for x in critical.split(",")]
     except:
-        critical = [8, 4, -1]
+        critical = [8, 4, -1, -2]
 
-    ok = list(range(-1, 8))  # should include the range of all posiible values
+    ok = list(range(-2, 8))  # should include the range of all possible values
     try:
-        worst_state = -2
+        worst_state = -3
         message = ""
         try:
             try:
@@ -844,6 +844,9 @@ def check_replset_state(con, perf_data, warning="", critical=""):
         except pymongo.errors.OperationFailure as e:
             if ((e.code == None and str(e).find('failed: not running with --replSet"')) or (e.code == 76 and str(e).find('not running with --replSet"'))):
                 worst_state = -1
+            if e.code==93 and str(e).find('config is invalid or we are not a member"'):
+                worst_state = -2
+            message += state_text(worst_state)
 
         return check_levels(worst_state, warning, critical, message, ok)
     except Exception as e:
@@ -875,6 +878,8 @@ def state_text(state):
         return  "Arbiter"
     elif state == -1:
         return  "Not running with replSet"
+    elif state == -2:
+        return  "ReplSet config is invalid or we are not a member of it"
     else:
         return  "Unknown state"
 
