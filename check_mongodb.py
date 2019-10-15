@@ -138,7 +138,8 @@ def main(argv):
                  choices=['connect', 'connections', 'replication_lag', 'replication_lag_percent', 'replset_state', 'memory', 'memory_mapped', 'lock',
                           'flushing', 'last_flush_time', 'index_miss_ratio', 'databases', 'collections', 'database_size', 'database_indexes', 'collection_documents', 'collection_indexes', 'collection_size',
                           'collection_storageSize', 'queues', 'oplog', 'journal_commits_in_wl', 'write_data_files', 'journaled', 'opcounters', 'current_lock', 'replica_primary',
-                          'page_faults', 'asserts', 'queries_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 'collection_state', 'row_count', 'replset_quorum'])
+                          'page_faults', 'asserts', 'queries_per_second', 'reads_per_second', 'writes_per_second', 'ops_per_second', 'page_faults', 'chunks_balance', 'connect_primary', 
+                          'collection_state', 'row_count', 'replset_quorum'])
     p.add_option('--max-lag', action='store_true', dest='max_lag', default=False, help='Get max replication lag (for replication_lag action only)')
     p.add_option('--mapped-memory', action='store_true', dest='mapped_memory', default=False, help='Get mapped memory instead of resident (if resident memory can not be read)')
     p.add_option('-D', '--perf-data', action='store_true', dest='perf_data', default=False, help='Enable output of Nagios performance data')
@@ -269,6 +270,12 @@ def main(argv):
         return check_replica_primary(con, host, warning, critical, perf_data, replicaset, mongo_version)
     elif action == "queries_per_second":
         return check_queries_per_second(con, query_type, warning, critical, perf_data, mongo_version)
+    elif action == "reads_per_second":
+        return check_reads_per_second(con, warning, critical, perf_data, mongo_version)
+    elif action == "writes_per_second":
+        return check_writes_per_second(con, warning, critical, perf_data, mongo_version)
+    elif action == "ops_per_second":
+        return check_ops_per_second(con, warning, critical, perf_data, mongo_version)
     elif action == "page_faults":
         check_page_faults(con, sample_time, warning, critical, perf_data)
     elif action == "chunks_balance":
@@ -393,8 +400,8 @@ def check_connect(host, port, warning, critical, perf_data, user, passwd, conn_t
 
 
 def check_connections(con, warning, critical, perf_data):
-    warning = warning or 80
-    critical = critical or 95
+    warning = warning or 70
+    critical = critical or 80
     try:
         data = get_server_status(con)
 
@@ -425,8 +432,8 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
         warning = warning or 50
         critical = critical or 75
     else:
-        warning = warning or 600
-        critical = critical or 3600
+        warning = warning or 15
+        critical = critical or 30
     rs_status = {}
     slaveDelays = {}
     try:
@@ -819,9 +826,9 @@ def check_replset_state(con, perf_data, warning="", critical=""):
     try:
         critical = [int(x) for x in critical.split(",")]
     except:
-        critical = [8, 4, -1]
+        critical = [8, 4, 6, 9, -1]
 
-    ok = list(range(-1, 8))  # should include the range of all posiible values
+    ok = list(range(-1, 10))  # should include the range of all posiible values
     try:
         worst_state = -2
         message = ""
@@ -1108,10 +1115,7 @@ def check_collection_storageSize(con, database, collection, warning, critical, p
         return exit_with_general_critical(e)
 
 
-def check_queries_per_second(con, query_type, warning, critical, perf_data, mongo_version):
-    warning = warning or 250
-    critical = critical or 500
-
+def queries_per_second_metric(con, query_type, mongo_version):
     if query_type not in ['insert', 'query', 'update', 'delete', 'getmore', 'command']:
         return exit_with_general_critical("The query type of '%s' is not valid" % query_type)
 
@@ -1130,8 +1134,7 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
             diff_ts = ts - last_count['data'][query_type]['ts']
 
             if diff_ts == 0:
-                message = "diff_query = " + str(diff_query) + " diff_ts = " + str(diff_ts)
-                return check_levels(0, warning, critical, message)
+                return 0
 
             query_per_sec = float(diff_query) / float(diff_ts)
 
@@ -1141,13 +1144,10 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
             else:
                 db.nagios_check.update_one({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
 
-            message = "Queries / Sec: %f" % query_per_sec
-            message += performance_data(perf_data, [(query_per_sec, "%s_per_sec" % query_type, warning, critical, message)])
         except KeyError:
             #
             # since it is the first run insert it
             query_per_sec = 0
-            message = "First run of check.. no data"
             if mongo_version == 2:
                 db.nagios_check.update({u'_id': last_count['_id']}, {'$set': {"data.%s" % query_type: {'count': num, 'ts': int(time.time())}}})
             else:
@@ -1157,16 +1157,77 @@ def check_queries_per_second(con, query_type, warning, critical, perf_data, mong
             #
             # since it is the first run insert it
             query_per_sec = 0
-            message = "First run of check.. no data"
             if mongo_version == 2:
                 db.nagios_check.insert({'check': 'query_counts', 'data': {query_type: {'count': num, 'ts': int(time.time())}}})
             else:
                 db.nagios_check.insert_one({'check': 'query_counts', 'data': {query_type: {'count': num, 'ts': int(time.time())}}})
 
-        return check_levels(query_per_sec, warning, critical, message)
+        return query_per_sec
 
     except Exception as e:
         return exit_with_general_critical(e)
+
+
+def check_queries_per_second(con, query_type, warning, critical, perf_data, mongo_version):
+    warning = warning or 250
+    critical = critical or 500
+
+    query_per_sec = queries_per_second_metric(con, query_type, mongo_version)
+
+    message = "Queries / Sec: %f" % query_per_sec
+    message += performance_data(perf_data, [(query_per_sec, "%s_per_sec" % query_type, warning, critical, message)])
+
+    return check_levels(query_per_sec, warning, critical, message)
+
+
+def check_reads_per_second(con, warning, critical, perf_data, mongo_version):
+    warning = warning or 250
+    critical = critical or 500
+
+    reads_per_sec = 0
+
+    for query_type in ['query', 'getmore']:
+        reads_per_sec += queries_per_second_metric(con, query_type, mongo_version)
+
+    message = "Reads / Sec: %f" % reads_per_sec
+    message += performance_data(perf_data, [(reads_per_sec, "reads_per_sec", warning, critical)])
+
+    return check_levels(reads_per_sec, warning, critical, message)
+
+
+def check_writes_per_second(con, warning, critical, perf_data, mongo_version):
+    warning = warning or 250
+    critical = critical or 500
+
+    writes_per_sec = 0
+
+    for query_type in ['insert', 'update', 'delete']:
+        writes_per_sec += queries_per_second_metric(con, query_type, mongo_version)
+
+    message = "Writes / Sec: %f" % writes_per_sec
+    message += performance_data(perf_data, [(writes_per_sec, "writes_per_sec", warning, critical)])
+
+    return check_levels(writes_per_sec, warning, critical, message)
+
+
+def check_ops_per_second(con, warning, critical, perf_data, mongo_version):
+    warning = warning or 250
+    critical = critical or 500
+
+    ops_per_sec = 0
+    ops_for_perf_data = []
+
+    for query_type in ['query', 'getmore', 'insert', 'update', 'delete', 'command']:
+        ops = queries_per_second_metric(con, query_type, mongo_version)
+        ops_per_sec += ops
+        ops_for_perf_data.append((ops, query_type))
+
+    ops_for_perf_data.append((ops_per_sec, 'Total', warning, critical))
+
+    message = "Ops / Sec: %f" % ops_per_sec
+    message += performance_data(perf_data, ops_for_perf_data)
+
+    return check_levels(ops_per_sec, warning, critical, message)
 
 
 def check_oplog(con, warning, critical, perf_data):
