@@ -1179,12 +1179,12 @@ def check_oplog(con, warning, critical, perf_data):
     critical = critical or 4
     try:
         db = con.local
-        ol = db.system.namespaces.find_one({"name": "local.oplog.rs"})
-        if (db.system.namespaces.find_one({"name": "local.oplog.rs"}) != None):
+        ol = db.listCollections.find_one({"name": "local.oplog.rs"})
+        if (db.listCollections.find_one({"name": "local.oplog.rs"}) != None):
             oplog = "oplog.rs"
         else:
-            ol = db.system.namespaces.find_one({"name": "local.oplog.$main"})
-            if (db.system.namespaces.find_one({"name": "local.oplog.$main"}) != None):
+            ol = db.listCollections.find_one({"name": "local.oplog.$main"})
+            if (db.listCollections.find_one({"name": "local.oplog.$main"}) != None):
                 oplog = "oplog.$main"
             else:
                 message = "neither master/slave nor replica set replication detected"
@@ -1632,7 +1632,7 @@ def maintain_delta(new_vals, host, port, action):
 def replication_get_time_diff(con):
     col = 'oplog.rs'
     local = con.local
-    ol = local.system.namespaces.find_one({"name": "local.oplog.$main"})
+    ol = local.listCollections.find_one({"name": "local.oplog.$main"})
     if ol:
         col = 'oplog.$main'
     firstc = local[col].find().sort("$natural", 1).limit(1)
