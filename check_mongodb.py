@@ -48,6 +48,7 @@ if pymongo.version >= "1.9":
 else:
     import pymongo.son as son
 
+UNSUPPORTED_SERVICE_CHECK_ERROR = "This service check is not supported for versions of MongoDB 3.2 and above"
 
 #
 # thanks to http://stackoverflow.com/a/1229667/72987
@@ -1223,13 +1224,16 @@ Under very high write situations it is normal for this value to be nonzero.  """
 
     warning = warning or 10
     critical = critical or 40
+    data = get_server_status(con)
     try:
-        data = get_server_status(con)
         j_commits_in_wl = data['dur']['commitsInWriteLock']
-        message = "Journal commits in DB write lock : %d" % j_commits_in_wl
-        message += performance_data(perf_data, [(j_commits_in_wl, "j_commits_in_wl", warning, critical)])
+    except KeyError:
+        return exit_with_general_critical(UNSUPPORTED_SERVICE_CHECK_ERROR)
+    message = "Journal commits in DB write lock : %d" % j_commits_in_wl
+    try:
+        message += performance_data(perf_data,
+                                    [(j_commits_in_wl, "j_commits_in_wl", warning, critical)])
         return check_levels(j_commits_in_wl, warning, critical, message)
-
     except Exception as e:
         return exit_with_general_critical(e)
 
@@ -1239,13 +1243,17 @@ def check_journaled(con, warning, critical, perf_data):
 
     warning = warning or 20
     critical = critical or 40
-    try:
-        data = get_server_status(con)
-        journaled = data['dur']['journaledMB']
-        message = "Journaled : %.2f MB" % journaled
-        message += performance_data(perf_data, [("%.2f" % journaled, "journaled", warning, critical)])
-        return check_levels(journaled, warning, critical, message)
 
+    data = get_server_status(con)
+    try:
+        journaled = data['dur']['journaledMB']
+    except KeyError:
+        return exit_with_general_critical(UNSUPPORTED_SERVICE_CHECK_ERROR)
+    message = "Journaled : %.2f MB" % journaled
+    try:
+        message += performance_data(perf_data,
+                                    [("%.2f" % journaled, "journaled", warning, critical)])
+        return check_levels(journaled, warning, critical, message)
     except Exception as e:
         return exit_with_general_critical(e)
 
@@ -1256,17 +1264,18 @@ As these writes are already journaled, they can occur lazily, and thus the numbe
 than the amount physically written to disk."""
     warning = warning or 20
     critical = critical or 40
+    data = get_server_status(con)
     try:
-        data = get_server_status(con)
         writes = data['dur']['writeToDataFilesMB']
-        message = "Write to data files : %.2f MB" % writes
-        message += performance_data(perf_data, [("%.2f" % writes, "write_to_data_files", warning, critical)])
+    except KeyError:
+        return exit_with_general_critical(UNSUPPORTED_SERVICE_CHECK_ERROR)
+    message = "Write to data files : %.2f MB" % writes
+    try:
+        message += performance_data(perf_data,
+                                    [("%.2f" % writes, "write_to_data_files", warning, critical)])
         return check_levels(writes, warning, critical, message)
-
     except Exception as e:
         return exit_with_general_critical(e)
-
-
 def get_opcounters(data, opcounters_name, host, port):
     try:
         insert = data[opcounters_name]['insert']
