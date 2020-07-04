@@ -485,7 +485,7 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
                     for member in rs_status['members']:
                         if not member['stateStr'] == "ARBITER":
                             lastSlaveOpTime = member['optimeDate']
-                            replicationLag = abs(primary_node["optimeDate"] - lastSlaveOpTime).seconds - slaveDelays[member['name']]
+                            replicationLag = abs(primary_node["optimeDate"] - lastSlaveOpTime).total_seconds() - slaveDelays[member['name']]
                             data = data + member['name'] + " lag=%d;" % replicationLag
                             maximal_lag = max(maximal_lag, replicationLag)
                     if percent:
