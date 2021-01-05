@@ -23,7 +23,7 @@ In your Nagios plugins directory run
 
 Then use pip to ensure you have all pre-requisites.
 
-<pre><code>pip install requirements</code></pre>
+<pre><code>pip install -r requirements</code></pre>
 
 Alternatively, install directly through pip:
 
