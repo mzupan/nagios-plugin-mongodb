@@ -34,6 +34,7 @@ import optparse
 import re
 import os
 import numbers
+import socket
 
 try:
     import pymongo
@@ -136,6 +137,7 @@ def main(argv):
 
     p.add_option('-H', '--host', action='store', type='string', dest='host', default='127.0.0.1', help='The hostname you want to connect to')
     p.add_option('-h', '--host-to-check', action='store', type='string', dest='host_to_check', default=None, help='The hostname you want to check (if this is different from the host you are connecting)')
+    p.add_option('--rdns-lookup', action='store_true', dest='rdns_lookup', default=False, help='RDNS(PTR) lookup on given host/host-to-check, to convert ip-address to fqdn')
     p.add_option('-P', '--port', action='store', type='int', dest='port', default=27017, help='The port mongodb is running on')
     p.add_option('--port-to-check', action='store', type='int', dest='port_to_check', default=None, help='The port you want to check (if this is different from the port you are connecting)')
     p.add_option('-u', '--user', action='store', type='string', dest='user', default=None, help='The username you want to login as')
@@ -165,11 +167,13 @@ def main(argv):
     p.add_option('-f', '--ssl-cert-file', action='store', type='string', dest='cert_file', default=None, help='Path to PEM encoded key and cert for client authentication')
     p.add_option('-m','--auth-mechanism', action='store', type='choice', dest='auth_mechanism', default=None, help='Auth mechanism used for auth with mongodb',
     choices=['MONGODB-X509','SCRAM-SHA-256','SCRAM-SHA-1'])
-    p.add_option('--disable_retry_writes', dest='retry_writes_disabled', default=False, action='callback', callback=optional_arg(True), help='Disable retryWrites feature')    
+    p.add_option('--disable_retry_writes', dest='retry_writes_disabled', default=False, action='callback', callback=optional_arg(True), help='Disable retryWrites feature')
 
     options, arguments = p.parse_args()
     host = options.host
     host_to_check = options.host_to_check if options.host_to_check else options.host
+    if (options.rdns_lookup):
+      host_to_check = socket.getnameinfo((host_to_check, 0), 0)[0]
     port = options.port
     port_to_check = options.port_to_check if options.port_to_check else options.port
     user = options.user
@@ -197,7 +201,7 @@ def main(argv):
     ssl_ca_cert_file = options.ssl_ca_cert_file
     cert_file = options.cert_file
     auth_mechanism = options.auth_mechanism
-    retry_writes_disabled = options.retry_writes_disabled    
+    retry_writes_disabled = options.retry_writes_disabled
 
     if action == 'replica_primary' and replicaset is None:
         return "replicaset must be passed in when using replica_primary check"
