@@ -172,7 +172,8 @@ def main(argv):
     options, arguments = p.parse_args()
     host = options.host
     host_to_check = options.host_to_check if options.host_to_check else options.host
-    if (options.rdns_lookup):
+    rdns_lookup = options.rdns_lookup
+    if (rdns_lookup):
       host_to_check = socket.getnameinfo((host_to_check, 0), 0)[0]
     port = options.port
     port_to_check = options.port_to_check if options.port_to_check else options.port
@@ -226,9 +227,9 @@ def main(argv):
     if action == "connections":
         return check_connections(con, warning, critical, perf_data)
     elif action == "replication_lag":
-        return check_rep_lag(con, host_to_check, port_to_check, warning, critical, False, perf_data, max_lag, ssl, user, passwd, replicaset, authdb, insecure, ssl_ca_cert_file, cert_file, auth_mechanism, retry_writes_disabled=retry_writes_disabled)
+        return check_rep_lag(con, host_to_check, port_to_check, rdns_lookup, warning, critical, False, perf_data, max_lag, ssl, user, passwd, replicaset, authdb, insecure, ssl_ca_cert_file, cert_file, auth_mechanism, retry_writes_disabled=retry_writes_disabled)
     elif action == "replication_lag_percent":
-        return check_rep_lag(con, host_to_check, port_to_check, warning, critical, True, perf_data, max_lag, ssl, user, passwd, replicaset, authdb, insecure, ssl_ca_cert_file, cert_file, auth_mechanism, retry_writes_disabled=retry_writes_disabled)
+        return check_rep_lag(con, host_to_check, port_to_check, rdns_lookup, warning, critical, True, perf_data, max_lag, ssl, user, passwd, replicaset, authdb, insecure, ssl_ca_cert_file, cert_file, auth_mechanism, retry_writes_disabled=retry_writes_disabled)
     elif action == "replset_state":
         return check_replset_state(con, perf_data, warning, critical)
     elif action == "memory":
@@ -428,7 +429,7 @@ def check_connections(con, warning, critical, perf_data):
         return exit_with_general_critical(e)
 
 
-def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_lag, ssl=False, user=None, passwd=None, replicaset=None, authdb="admin", insecure=None, ssl_ca_cert_file=None, cert_file=None, auth_mechanism=None, retry_writes_disabled=False):
+def check_rep_lag(con, host, port, rdns_lookup, warning, critical, percent, perf_data, max_lag, ssl=False, user=None, passwd=None, replicaset=None, authdb="admin", insecure=None, ssl_ca_cert_file=None, cert_file=None, auth_mechanism=None, retry_writes_disabled=False):
     # Get mongo to tell us replica set member name when connecting locally
     if "127.0.0.1" == host:
         if not "me" in list(con.admin.command("ismaster","1").keys()):
@@ -474,7 +475,15 @@ def check_rep_lag(con, host, port, warning, critical, percent, perf_data, max_la
             for member in rs_status["members"]:
                 if member["stateStr"] == "PRIMARY":
                     primary_node = member
-                if member.get('name') == "{0}:{1}".format(host, port):
+
+                # if rdns_lookup is true then lookup both values back to their rdns value so we can compare hostname vs fqdn
+                if rdns_lookup:
+                    member_host, member_port = split_host_port(member.get('name'))
+                    member_host = "{0}:{1}".format(socket.getnameinfo((member_host, 0), 0)[0], member_port)
+                    if member_host == "{0}:{1}".format(socket.getnameinfo((host, 0), 0)[0], port):
+                        host_node = member
+                # Exact match
+                elif member.get('name') == "{0}:{1}".format(host, port):
                     host_node = member
 
             # Check if we're in the middle of an election and don't have a primary
