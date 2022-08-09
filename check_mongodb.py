@@ -288,7 +288,7 @@ def main(argv):
     elif action == "chunks_balance":
         chunks_balance(con, database, collection, warning, critical)
     elif action == "connect_primary":
-        return check_connect_primary(con, warning, critical, perf_data)
+        return check_connect_primary(con, warning, critical, perf_data, ssl, user, passwd, replicaset, authdb, insecure, ssl_ca_cert_file, cert_file, auth_mechanism, retry_writes_disabled=retry_writes_disabled)
     elif action == "collection_state":
         return check_collection_state(con, database, collection)
     elif action == "row_count":
@@ -1524,7 +1524,7 @@ def chunks_balance(con, database, collection, warning, critical):
     sys.exit(0)
 
 
-def check_connect_primary(con, warning, critical, perf_data):
+def check_connect_primary(con, warning, critical, perf_data, ssl=False, user=None, passwd=None, replicaset=None, authdb="admin", insecure=False, ssl_ca_cert_file=None, cert_file=None, auth_mechanism=None, retry_writes_disabled=False):
     warning = warning or 3
     critical = critical or 6
 
@@ -1543,7 +1543,7 @@ def check_connect_primary(con, warning, critical, perf_data):
         pport = int(data['primary'].split(':')[1])
         start = time.time()
 
-        err, con = mongo_connect(phost, pport)
+        err, con = mongo_connect(phost, pport, ssl, user, passwd, replicaset, authdb, insecure, ssl_ca_cert_file, cert_file, auth_mechanism, retry_writes_disabled)
         if err != 0:
             return err
 
