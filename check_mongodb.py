@@ -931,7 +931,10 @@ def check_collections(con, warning, critical, perf_data=None):
         for db in data['databases']:
             dbase = con[db['name']]
             set_read_preference(dbase)
-            count += len(dbase.collection_names())
+            if pymongo.version >= "3.7":
+                count += len(dbase.list_collection_names())
+            else:
+                count += len(dbase.collection_names())
 
         message = "Number of collections: %.0f" % count
         message += performance_data(perf_data, [(count, "collections", warning, critical, message)])
