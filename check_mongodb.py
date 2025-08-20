@@ -1413,12 +1413,16 @@ def check_asserts(con, host, port, warning, critical, perf_data):
 
 def get_stored_primary_server_name(db):
     """ get the stored primary server name from db. """
-    if "last_primary_server" in db.collection_names():
-        stored_primary_server = db.last_primary_server.find_one()["server"]
+    # Choose the correct collection listing method based on PyMongo version
+    if pymongo.version >= "3.7":
+        collection_list_method = db.list_collection_names
     else:
-        stored_primary_server = None
+        collection_list_method = db.collection_names
 
-    return stored_primary_server
+    if "last_primary_server" in collection_list_method():
+        return db.last_primary_server.find_one()["server"]
+    else:
+        return None
 
 
 def check_replica_primary(con, host, warning, critical, perf_data, replicaset, mongo_version):
