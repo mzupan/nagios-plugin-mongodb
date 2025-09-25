@@ -348,7 +348,7 @@ def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, repli
           sys.exit(2)
 
         if 'arbiterOnly' in result and result['arbiterOnly'] == True:
-            print("OK - State: 7 (Arbiter on port %s)" % (port))
+            print("OK - State: 7 (Arbiter on port %s)" % (port) + " |state=7")
             sys.exit(0)
 
         if user and passwd:
