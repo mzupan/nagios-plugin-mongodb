@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # A MongoDB Nagios check script
@@ -324,14 +324,14 @@ def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, repli
         # ssl connection for pymongo > 2.3
         if pymongo.version >= "2.3":
             if replica is None:
-                con = pymongo.MongoClient(host, port, **con_args)
+                con = pymongo.MongoClient(host, port, username=user, password=passwd, **con_args)
             else:
-                con = pymongo.MongoClient(host, port, read_preference=pymongo.ReadPreference.SECONDARY, replicaSet=replica, **con_args)
+                con = pymongo.MongoClient(host, port, username=user, password=passwd, read_preference=pymongo.ReadPreference.SECONDARY, replicaSet=replica, **con_args)
         else:
             if replica is None:
-                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
+                con = pymongo.Connection(host, port, username=user, password=passwd, slave_okay=True, network_timeout=10)
             else:
-                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
+                con = pymongo.Connection(host, port, username=user, password=passwd, slave_okay=True, network_timeout=10)
 
         # we must authenticate the connection, otherwise we won't be able to perform certain operations
         if ssl_cert and ssl_ca_cert_file and user and auth_mechanism == 'SCRAM-SHA-256':
@@ -350,13 +350,6 @@ def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, repli
         if 'arbiterOnly' in result and result['arbiterOnly'] == True:
             print("OK - State: 7 (Arbiter on port %s)" % (port))
             sys.exit(0)
-
-        if user and passwd:
-            db = con[authdb]
-            try:
-              db.authenticate(user, password=passwd)
-            except PyMongoError:
-                sys.exit("Username/Password incorrect")
 
         # Ping to check that the server is responding.
         con.admin.command("ping")
@@ -1589,7 +1582,7 @@ def check_row_count(con, database, collection, warning, critical, perf_data):
 
 def build_file_name(host, port, action):
     #done this way so it will work when run independently and from shell
-    module_name = re.match('(.*//*)*(.*)\..*', __file__).group(2)
+    module_name = re.match('(.*//*)*(.*)\\..*', __file__).group(2)
 
     if (port == 27017):
         return "/tmp/" + module_name + "_data/" + host + "-" + action + ".data"
