@@ -1589,7 +1589,7 @@ def check_row_count(con, database, collection, warning, critical, perf_data):
 
 def build_file_name(host, port, action):
     #done this way so it will work when run independently and from shell
-    module_name = re.match('(.*//*)*(.*)\..*', __file__).group(2)
+    module_name = re.match(r'(.*//*)*(.*)\..*', __file__).group(2)
 
     if (port == 27017):
         return "/tmp/" + module_name + "_data/" + host + "-" + action + ".data"
