@@ -168,6 +168,7 @@ def main(argv):
     p.add_option('-m','--auth-mechanism', action='store', type='choice', dest='auth_mechanism', default=None, help='Auth mechanism used for auth with mongodb',
     choices=['MONGODB-X509','SCRAM-SHA-256','SCRAM-SHA-1'])
     p.add_option('--disable_retry_writes', dest='retry_writes_disabled', default=False, action='callback', callback=optional_arg(True), help='Disable retryWrites feature')
+    p.add_option('-t', '--timeout', action='store', type='int', dest='timeout', default=10, help='Timeouts to use in Mongo Client connections, in seconds')
 
     options, arguments = p.parse_args()
     host = options.host
@@ -203,6 +204,7 @@ def main(argv):
     cert_file = options.cert_file
     auth_mechanism = options.auth_mechanism
     retry_writes_disabled = options.retry_writes_disabled
+    timeout = options.timeout
 
     if action == 'replica_primary' and replicaset is None:
         return "replicaset must be passed in when using replica_primary check"
@@ -213,7 +215,7 @@ def main(argv):
     # moving the login up here and passing in the connection
     #
     start = time.time()
-    err, con = mongo_connect(host, port, ssl, user, passwd, replicaset, authdb, insecure, ssl_ca_cert_file, cert_file, auth_mechanism, retry_writes_disabled=retry_writes_disabled)
+    err, con = mongo_connect(host, port, ssl, user, passwd, replicaset, authdb, insecure, ssl_ca_cert_file, cert_file, auth_mechanism, retry_writes_disabled=retry_writes_disabled, timeout=timeout)
     if err != 0:
         return err
 
@@ -299,7 +301,7 @@ def main(argv):
         return check_connect(host, port, warning, critical, perf_data, user, passwd, conn_time)
 
 
-def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, replica=None, authdb="admin", insecure=False, ssl_ca_cert_file=None, ssl_cert=None, auth_mechanism=None, retry_writes_disabled=False):
+def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, replica=None, authdb="admin", insecure=False, ssl_ca_cert_file=None, ssl_cert=None, auth_mechanism=None, retry_writes_disabled=False, timeout=10):
     from pymongo.errors import ConnectionFailure
     from pymongo.errors import PyMongoError
     import ssl as SSL
@@ -320,6 +322,8 @@ def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, repli
     if retry_writes_disabled:
         con_args['retryWrites'] = False
 
+    con_args['timeoutMS'] = timeout * 1000;
+
     try:
         # ssl connection for pymongo > 2.3
         if pymongo.version >= "2.3":
@@ -329,9 +333,9 @@ def mongo_connect(host=None, port=None, ssl=False, user=None, passwd=None, repli
                 con = pymongo.MongoClient(host, port, read_preference=pymongo.ReadPreference.SECONDARY, replicaSet=replica, **con_args)
         else:
             if replica is None:
-                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
+                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=timeout)
             else:
-                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=10)
+                con = pymongo.Connection(host, port, slave_okay=True, network_timeout=timeout)
 
         # we must authenticate the connection, otherwise we won't be able to perform certain operations
         if ssl_cert and ssl_ca_cert_file and user and auth_mechanism == 'SCRAM-SHA-256':
